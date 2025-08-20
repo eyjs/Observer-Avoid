@@ -1010,9 +1010,13 @@
 
               console.log('BroadcastChannel 연결 성공');
 
-              // 60fps 동기화 (16ms)
-              setInterval(broadcastMyPlayer, 16);
-              setInterval(broadcastGameWorld, 16);
+              // Player state is sent frequently for responsiveness
+              setInterval(broadcastMyPlayer, 16); // ~60fps
+
+              // Host sends world state less frequently to save bandwidth
+              if (gameState.isHost) {
+                  setInterval(broadcastGameWorld, 50); // 20fps
+              }
 
           } catch (error) {
               console.log('BroadcastChannel 미지원, localStorage로 폴백');
@@ -1020,7 +1024,29 @@
           }
       }
 
+      let lastHostMessageTime = 0;
+
+      function checkHostHealth() {
+          if (gameState.isHost || !gameState.gameRunning) return;
+
+          if (Date.now() - lastHostMessageTime > 3000) { // 3-second timeout
+              console.warn("Host timed out. Starting new election.");
+              const oldHostId = gameState.hostId;
+              gameState.hostId = null;
+              lastHostMessageTime = Date.now(); // Prevent re-triggering immediately
+              
+              if (oldHostId) {
+                  electNewHost();
+              }
+          }
+      }
+
       function handleGameMessage(data) {
+          // Heartbeat: Any message from the host resets the timer for clients.
+          if (!gameState.isHost && data.hostId) {
+              lastHostMessageTime = Date.now();
+          }
+
           switch(data.type) {
               case 'player_update':
                   if (data.playerId !== gameState.myPlayerId) {
@@ -1051,7 +1077,10 @@
                           player.alive = true;
                           player.invulnerable = true;
                           player.invulnerabilityStart = Date.now();
-                          console.log(`${player.name}이(가) 부활했습니다.`);
+                          player.score = 0;
+                          player.killScore = 0;
+                          player.level = 1;
+                          console.log(`${player.name}이(가) 부활했습니다. 점수가 초기화되었습니다.`);
                       }
                   }
                   break;
@@ -1430,16 +1459,20 @@
               }
           }
 
-          gameState.bullets.forEach((bullet, bulletIndex) => {
+          for (let bulletIndex = gameState.bullets.length - 1; bulletIndex >= 0; bulletIndex--) {
+              const bullet = gameState.bullets[bulletIndex];
+
               if (bullet instanceof MonsterBullet) {
+                  let hit = false;
                   gameState.players.forEach(player => {
-                      if (!player.alive || player.invulnerable) return;
+                      if (hit || !player.alive || player.invulnerable) return;
 
                       const distance = Math.sqrt(Math.pow(player.x - bullet.x, 2) + Math.pow(player.y - bullet.y, 2));
 
                       if (distance < player.size + bullet.size) {
                           player.alive = false;
                           gameState.bullets.splice(bulletIndex, 1);
+                          hit = true;
 
                           if (player.id === gameState.myPlayerId) {
                               showGameOver();
@@ -1447,8 +1480,9 @@
                       }
                   });
               } else {
+                  let hit = false;
                   gameState.players.forEach(player => {
-                      if (player.id === bullet.shooterId || !player.alive) return;
+                      if (hit || player.id === bullet.shooterId || !player.alive) return;
 
                       const distance = Math.sqrt(
                           Math.pow(player.x - bullet.x, 2) +
@@ -1460,11 +1494,14 @@
                           player.stunned = true;
                           player.stunStart = Date.now();
                           gameState.bullets.splice(bulletIndex, 1);
+                          hit = true;
                       }
                   });
 
+                  if (hit) continue;
+
                   gameState.monsters.forEach(monster => {
-                      if (!monster.alive) return;
+                      if (hit || !monster.alive) return;
 
                       const distance = Math.sqrt(
                           Math.pow(monster.x - bullet.x, 2) +
@@ -1477,9 +1514,11 @@
                               if (bullet instanceof ChainLightning) {
                                   if (!bullet.onHit(monster)) {
                                       gameState.bullets.splice(bulletIndex, 1);
+                                      hit = true;
                                   }
                               } else {
                                   gameState.bullets.splice(bulletIndex, 1);
+                                  hit = true;
                               }
                           }
 
@@ -1494,7 +1533,7 @@
                       }
                   });
               }
-          });
+          }
       }
 
       function showGameOver() {
@@ -1509,6 +1548,9 @@
           myPlayer.alive = true;
           myPlayer.invulnerable = true;
           myPlayer.invulnerabilityStart = Date.now();
+          myPlayer.score = 0;
+          myPlayer.killScore = 0;
+          myPlayer.level = 1;
 
           let safeX, safeY;
           let attempts = 0;
@@ -1611,7 +1653,7 @@
           }
       }
 
-      function gameLoop() {
+      function gameTick() {
           // 호스트는 모든 게임 로직(스폰, 업데이트, 충돌)에 대한 권한을 가짐
           if (gameState.isHost) {
               const allPlayersDead = Array.from(gameState.players.values()).every(p => !p.alive);
@@ -1623,7 +1665,13 @@
 
               spawnMonster();
               gameState.monsters.forEach(monster => monster.update());
-              gameState.bullets = gameState.bullets.filter(bullet => bullet.update());
+              
+              for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+                  if (!gameState.bullets[i].update()) {
+                      gameState.bullets.splice(i, 1);
+                  }
+              }
+
               checkCollisions(); // 모든 충돌 계산은 호스트만 수행
 
               // 시야에서 너무 멀리 떨어진 몬스터와 총알 정리
@@ -1644,7 +1692,9 @@
           if (myPlayer && myPlayer.alive) {
               myPlayer.update();
           }
+      }
 
+      function gameLoop() {
           // 렌더링은 항상 수행 (관전 모드를 위해)
           ctx.fillStyle = '#000428';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1675,7 +1725,6 @@
       }
 
       function joinGame() {
-          if (gameState.debug) console.log('Player joining game');
           if (gameState.debug) console.log('Player joining game');
           const nameInput = document.getElementById('playerName');
           const name = nameInput.value.trim();
@@ -1739,6 +1788,8 @@
 
           if (!gameState.isHost) {
               checkForHost();
+              lastHostMessageTime = Date.now();
+              setInterval(checkHostHealth, 1000); // Check host health every second
           }
 
           setTimeout(() => {
@@ -1753,6 +1804,7 @@
           }, 100);
 
           gameLoop();
+          setInterval(gameTick, 1000 / 60); // 60 ticks per second
       }
 
       function showRoomLink(url) {
@@ -2052,7 +2104,7 @@
       });
 
       window.addEventListener('beforeunload', () => {
-          if (gameState.roomId && gameState.myPlayerId) {a
+          if (gameState.roomId && gameState.myPlayerId) {
               localStorage.removeItem('player_' + gameState.myPlayerId);
           }
       });
