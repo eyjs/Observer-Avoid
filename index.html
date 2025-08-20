@@ -1,1091 +1,1131 @@
 <!DOCTYPE html>
 <html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>멀티플레이어 몬스터 피하기</title>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-      body {
-        background: linear-gradient(135deg, #0c1445, #1a237e);
-        font-family: 'Courier New', monospace;
-        color: #00ff00;
-        overflow: hidden;
-        height: 100vh;
-      }
+        body {
+            background: linear-gradient(135deg, #0c1445, #1a237e);
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+            overflow: hidden;
+            height: 100vh;
+        }
 
-      .game-container {
-        position: relative;
-        width: 100vw;
-        height: 100vh;
-      }
+        .game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
 
-      #gameCanvas {
-        background: radial-gradient(circle at center, #000428, #004e92);
-        border: 2px solid #00ff41;
-        display: block;
-        margin: 0 auto;
-      }
+        #gameCanvas {
+            background: radial-gradient(circle at center, #000428, #004e92);
+            border: 2px solid #00ff41;
+            display: block;
+            margin: 0 auto;
+        }
 
-      .ui {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        z-index: 10;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 10px;
-        border-radius: 5px;
-        border: 1px solid #00ff41;
-      }
+        .ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #00ff41;
+        }
 
-      .player-list {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 10;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 10px;
-        border-radius: 5px;
-        border: 1px solid #00ff41;
-        min-width: 200px;
-      }
+        .player-list {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #00ff41;
+            min-width: 200px;
+        }
 
-      .join-form {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.9);
-        padding: 30px;
-        border-radius: 10px;
-        border: 2px solid #00ff41;
-        text-align: center;
-        z-index: 20;
-      }
+        .join-form {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #00ff41;
+            text-align: center;
+            z-index: 20;
+        }
 
-      input[type='text'] {
-        background: rgba(0, 0, 0, 0.7);
-        border: 1px solid #00ff41;
-        color: #00ff00;
-        padding: 10px;
-        margin: 10px;
-        border-radius: 5px;
-        font-family: inherit;
-      }
+        input[type="text"] {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #00ff41;
+            color: #00ff00;
+            padding: 10px;
+            margin: 10px;
+            border-radius: 5px;
+            font-family: inherit;
+        }
 
-      button {
-        background: linear-gradient(45deg, #004e92, #000428);
-        border: 2px solid #00ff41;
-        color: #00ff00;
-        padding: 10px 20px;
-        cursor: pointer;
-        border-radius: 5px;
-        font-family: inherit;
-        margin: 5px;
-        transition: all 0.3s;
-      }
+        button {
+            background: linear-gradient(45deg, #004e92, #000428);
+            border: 2px solid #00ff41;
+            color: #00ff00;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: inherit;
+            margin: 5px;
+            transition: all 0.3s;
+        }
 
-      button:hover {
-        background: linear-gradient(45deg, #006bb3, #001845);
-        box-shadow: 0 0 10px #00ff41;
-      }
+        button:hover {
+            background: linear-gradient(45deg, #006bb3, #001845);
+            box-shadow: 0 0 10px #00ff41;
+        }
 
-      .game-over {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.95);
-        padding: 30px;
-        border-radius: 10px;
-        border: 2px solid #ff4444;
-        text-align: center;
-        z-index: 20;
-        display: none;
-      }
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #ff4444;
+            text-align: center;
+            z-index: 20;
+            display: none;
+        }
 
-      .instructions {
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 10px;
-        border-radius: 5px;
-        border: 1px solid #00ff41;
-        font-size: 12px;
-      }
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #00ff41;
+            font-size: 12px;
+        }
     </style>
-  </head>
-  <body>
+</head>
+<body>
     <div class="game-container">
-      <div class="join-form" id="joinForm">
-        <h2>멀티플레이어 몬스터 피하기</h2>
-        <p>닉네임을 입력하세요</p>
-        <input type="text" id="playerName" placeholder="닉네임" maxlength="15" />
-        <br />
-        <button onclick="joinGame()">게임 참가</button>
-      </div>
+        <div class="join-form" id="joinForm">
+            <h2>멀티플레이어 몬스터 피하기</h2>
+            <p>닉네임을 입력하세요</p>
+            <input type="text" id="playerName" placeholder="닉네임" maxlength="15">
+            <br>
+            <button onclick="joinGame()">게임 참가</button>
+        </div>
 
-      <div class="ui" id="gameUI" style="display: none">
-        <div>생존 시간: <span id="timeDisplay">0</span>초</div>
-        <div>몬스터 수: <span id="observerCount">0</span></div>
-        <div>내 점수: <span id="myScore">0</span></div>
-      </div>
+        <div class="ui" id="gameUI" style="display: none;">
+            <div>생존 시간: <span id="timeDisplay">0</span>초</div>
+            <div>몬스터 수: <span id="observerCount">0</span></div>
+            <div>내 점수: <span id="myScore">0</span></div>
+        </div>
 
-      <div class="player-list" id="playerList" style="display: none">
-        <h3>플레이어 목록</h3>
-        <div id="players"></div>
-      </div>
+        <div class="player-list" id="playerList" style="display: none;">
+            <h3>플레이어 목록</h3>
+            <div id="players"></div>
+        </div>
 
-      <canvas id="gameCanvas" style="display: none"></canvas>
+        <canvas id="gameCanvas" style="display: none;"></canvas>
 
-      <div class="game-over" id="gameOver">
-        <h2>게임 오버!</h2>
-        <p id="finalScore"></p>
-        <button onclick="respawn()">다시 시작</button>
-      </div>
+        <div class="game-over" id="gameOver">
+            <h2>게임 오버!</h2>
+            <p id="finalScore"></p>
+            <button onclick="respawn()">다시 시작</button>
+        </div>
 
-      <div class="instructions" id="instructions" style="display: none">
-        화살표 키 또는 WASD로 이동 • 스페이스바로 총 발사 • 몬스터를 피하세요! • 다른 플레이어와 부딪히면 기절!
-      </div>
+        <div class="instructions" id="instructions" style="display: none;">
+            화살표 키 또는 WASD로 이동 • 스페이스바로 총 발사 • 몬스터를 피하세요! • 다른 플레이어와 부딪히면 기절!
+        </div>
     </div>
 
     <script>
-      const canvas = document.getElementById('gameCanvas');
-      const ctx = canvas.getContext('2d');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
-      // 캔버스 크기 설정
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+        // 캔버스 크기 설정
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
 
-      // 게임 상태
-      let gameState = {
-        players: new Map(),
-        monsters: [],
-        bullets: [],
-        myPlayerId: null,
-        gameStartTime: Date.now(),
-        lastMonsterSpawn: 0,
-        keys: {},
-        gameRunning: false,
-        camera: { x: 0, y: 0 },
-        mapSize: { width: 2000, height: 2000 },
-        lastSpacePress: 0,
-      };
+        // 게임 상태
+        let gameState = {
+            players: new Map(),
+            monsters: [],
+            bullets: [],
+            myPlayerId: null,
+            gameStartTime: Date.now(),
+            lastMonsterSpawn: 0,
+            keys: {},
+            gameRunning: false,
+            camera: { x: 0, y: 0 },
+            mapSize: { width: 2000, height: 2000 },
+            lastSpacePress: 0
+        };
 
-      // 플레이어 클래스
-      class Player {
-        constructor(id, name, x, y, color) {
-          this.id = id;
-          this.name = name;
-          this.x = x;
-          this.y = y;
-          this.color = color;
-          this.alive = true;
-          this.score = 0;
-          this.size = 8;
-          this.speed = 3;
-          this.invulnerable = false;
-          this.invulnerabilityStart = 0;
-          this.stunned = false;
-          this.stunStart = 0;
-          this.bullets = 0;
-          this.lastX = x;
-          this.lastY = y;
-        }
-
-        update() {
-          if (!this.alive) return;
-
-          this.lastX = this.x;
-          this.lastY = this.y;
-
-          // 기절 상태 체크
-          if (this.stunned && Date.now() - this.stunStart > 100) {
-            this.stunned = false;
-          }
-
-          // 키 입력 처리 (자신의 플레이어만, 기절 중이 아닐 때)
-          if (this.id === gameState.myPlayerId && !this.stunned) {
-            let moved = false;
-            if (gameState.keys['ArrowUp'] || gameState.keys['KeyW']) {
-              this.y -= this.speed;
-              moved = true;
-            }
-            if (gameState.keys['ArrowDown'] || gameState.keys['KeyS']) {
-              this.y += this.speed;
-              moved = true;
-            }
-            if (gameState.keys['ArrowLeft'] || gameState.keys['KeyA']) {
-              this.x -= this.speed;
-              moved = true;
-            }
-            if (gameState.keys['ArrowRight'] || gameState.keys['KeyD']) {
-              this.x += this.speed;
-              moved = true;
+        // 플레이어 클래스
+        class Player {
+            constructor(id, name, x, y, color) {
+                this.id = id;
+                this.name = name;
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.alive = true;
+                this.score = 0;
+                this.size = 8;
+                this.speed = 3;
+                this.invulnerable = false;
+                this.invulnerabilityStart = 0;
+                this.stunned = false;
+                this.stunStart = 0;
+                this.bullets = 0;
+                this.lastX = x;
+                this.lastY = y;
             }
 
-            // 총알 발사 (스페이스바)
-            if (gameState.keys['Space'] && this.bullets > 0 && Date.now() - gameState.lastSpacePress > 200) {
-              this.shootBullet();
-              gameState.lastSpacePress = Date.now();
-            }
+            update() {
+                if (!this.alive) return;
 
-            // 맵 확장
-            if (moved) {
-              const expandMargin = 200;
-              if (this.x > gameState.mapSize.width - expandMargin) {
-                gameState.mapSize.width = this.x + expandMargin;
-              }
-              if (this.y > gameState.mapSize.height - expandMargin) {
-                gameState.mapSize.height = this.y + expandMargin;
-              }
-              if (this.x < expandMargin) {
-                gameState.mapSize.width += expandMargin - this.x;
-                const offset = expandMargin - this.x;
-                gameState.players.forEach((p) => (p.x += offset));
-                gameState.monsters.forEach((m) => (m.x += offset));
-                gameState.bullets.forEach((b) => (b.x += offset));
-                gameState.camera.x += offset;
-              }
-              if (this.y < expandMargin) {
-                gameState.mapSize.height += expandMargin - this.y;
-                const offset = expandMargin - this.y;
-                gameState.players.forEach((p) => (p.y += offset));
-                gameState.monsters.forEach((m) => (m.y += offset));
-                gameState.bullets.forEach((b) => (b.y += offset));
-                gameState.camera.y += offset;
-              }
-            }
-          }
+                this.lastX = this.x;
+                this.lastY = this.y;
 
-          // 무적 시간 체크
-          if (this.invulnerable && Date.now() - this.invulnerabilityStart > 3000) {
-            this.invulnerable = false;
-          }
-
-          // 점수 및 총알 계산
-          this.score = Math.floor((Date.now() - gameState.gameStartTime) / 100);
-          this.bullets = Math.floor(this.score / 1000);
-        }
-
-        shootBullet() {
-          if (this.bullets <= 0) return;
-
-          // 가장 가까운 적 찾기 (다른 플레이어나 몬스터)
-          let closestTarget = null;
-          let closestDistance = Infinity;
-
-          // 다른 플레이어들 체크
-          gameState.players.forEach((player) => {
-            if (player.id !== this.id && player.alive) {
-              const distance = Math.sqrt(Math.pow(player.x - this.x, 2) + Math.pow(player.y - this.y, 2));
-              if (distance < closestDistance && distance < 200) {
-                closestDistance = distance;
-                closestTarget = player;
-              }
-            }
-          });
-
-          // 몬스터들 체크
-          gameState.monsters.forEach((monster) => {
-            const distance = Math.sqrt(Math.pow(monster.x - this.x, 2) + Math.pow(monster.y - this.y, 2));
-            if (distance < closestDistance && distance < 200) {
-              closestDistance = distance;
-              closestTarget = monster;
-            }
-          });
-
-          if (closestTarget) {
-            const angle = Math.atan2(closestTarget.y - this.y, closestTarget.x - this.x);
-            gameState.bullets.push(new Bullet(this.x, this.y, angle, this.id));
-            this.bullets--;
-          }
-        }
-
-        draw() {
-          const screenX = this.x - gameState.camera.x + canvas.width / 2;
-          const screenY = this.y - gameState.camera.y + canvas.height / 2;
-
-          // 무적 상태일 때 깜빡임 효과
-          if (this.invulnerable) {
-            const blinkSpeed = 200;
-            const isVisible = Math.floor(Date.now() / blinkSpeed) % 2 === 0;
-            if (!isVisible) return;
-          }
-
-          // 기절 상태 효과
-          if (this.stunned) {
-            ctx.save();
-            ctx.translate(screenX, screenY);
-            ctx.rotate(Math.sin(Date.now() * 0.05) * 0.2);
-            ctx.translate(-screenX, -screenY);
-          }
-
-          // 플레이어 그리기
-          ctx.fillStyle = this.alive ? this.color : '#666666';
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
-          ctx.fill();
-
-          // 테두리
-          ctx.strokeStyle = this.alive ? '#ffffff' : '#333333';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          // 기절 상태 표시
-          if (this.stunned) {
-            ctx.fillStyle = '#ffff00';
-            ctx.font = '20px Courier New';
-            ctx.textAlign = 'center';
-            ctx.fillText('⭐', screenX, screenY + 5);
-            ctx.restore();
-          }
-
-          // 무적 상태 표시
-          if (this.invulnerable) {
-            ctx.strokeStyle = '#ffff00';
-            ctx.lineWidth = 3;
-            ctx.setLineDash([5, 5]);
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, this.size + 5, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.setLineDash([]);
-          }
-
-          // 이름 표시
-          ctx.fillStyle = '#ffffff';
-          ctx.font = '12px Courier New';
-          ctx.textAlign = 'center';
-          ctx.fillText(this.name, screenX, screenY - 15);
-
-          // 총알 개수 표시
-          if (this.bullets > 0) {
-            ctx.fillStyle = '#00ff00';
-            ctx.font = '10px Courier New';
-            ctx.fillText(`🔫${this.bullets}`, screenX, screenY + 20);
-          }
-
-          // 죽은 플레이어 표시
-          if (!this.alive) {
-            ctx.fillStyle = '#ff4444';
-            ctx.font = '16px Courier New';
-            ctx.fillText('💀', screenX, screenY + 5);
-          }
-        }
-      }
-
-      // 몬스터 베이스 클래스
-      class Monster {
-        constructor(x, y, type) {
-          this.x = x;
-          this.y = y;
-          this.type = type;
-          this.alive = true;
-          this.stunned = false;
-          this.stunStart = 0;
-          this.angle = 0;
-        }
-
-        update() {
-          if (!this.alive) return;
-
-          // 기절 상태 체크
-          if (this.stunned && Date.now() - this.stunStart > 2000) {
-            this.stunned = false;
-          }
-
-          if (!this.stunned) {
-            this.ai();
-          }
-
-          this.angle += 0.1;
-        }
-
-        ai() {
-          // 각 몬스터 타입별로 오버라이드
-        }
-
-        draw() {
-          const screenX = this.x - gameState.camera.x + canvas.width / 2;
-          const screenY = this.y - gameState.camera.y + canvas.height / 2;
-
-          // 화면 밖이면 그리지 않음
-          if (screenX < -50 || screenX > canvas.width + 50 || screenY < -50 || screenY > canvas.height + 50) {
-            return;
-          }
-
-          if (this.stunned) {
-            ctx.save();
-            ctx.translate(screenX, screenY);
-            ctx.rotate(Math.sin(Date.now() * 0.02) * 0.3);
-            ctx.translate(-screenX, -screenY);
-            ctx.fillStyle = '#666666';
-          } else {
-            ctx.fillStyle = this.color;
-          }
-
-          this.drawShape(screenX, screenY);
-
-          if (this.stunned) {
-            ctx.fillStyle = '#ffff00';
-            ctx.font = '16px Courier New';
-            ctx.textAlign = 'center';
-            ctx.fillText('💫', screenX, screenY - 20);
-            ctx.restore();
-          }
-        }
-      }
-
-      // 옵저버 (추적형)
-      class Observer extends Monster {
-        constructor(x, y) {
-          super(x, y, 'observer');
-          this.size = 15;
-          this.speed = 1.5;
-          this.color = '#ff6600';
-        }
-
-        ai() {
-          // 가장 가까운 살아있는 플레이어를 추적
-          let closestPlayer = null;
-          let closestDistance = Infinity;
-
-          gameState.players.forEach((player) => {
-            if (player.alive && !player.invulnerable) {
-              const distance = Math.sqrt(Math.pow(player.x - this.x, 2) + Math.pow(player.y - this.y, 2));
-              if (distance < closestDistance) {
-                closestDistance = distance;
-                closestPlayer = player;
-              }
-            }
-          });
-
-          if (closestPlayer) {
-            const dx = closestPlayer.x - this.x;
-            const dy = closestPlayer.y - this.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance > 0) {
-              this.x += (dx / distance) * this.speed;
-              this.y += (dy / distance) * this.speed;
-            }
-          }
-        }
-
-        drawShape(screenX, screenY) {
-          ctx.save();
-          ctx.translate(screenX, screenY);
-          ctx.rotate(this.angle);
-
-          ctx.beginPath();
-          ctx.ellipse(0, 0, this.size, this.size * 0.8, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = '#ffaa44';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          ctx.fillStyle = '#00ffff';
-          ctx.beginPath();
-          ctx.arc(0, 0, this.size * 0.3, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = '#00ffff';
-          ctx.lineWidth = 1;
-          for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(angle) * this.size, Math.sin(angle) * this.size);
-            ctx.stroke();
-          }
-
-          ctx.restore();
-        }
-      }
-
-      // 러셔 (빠른 돌진형)
-      class Rusher extends Monster {
-        constructor(x, y) {
-          super(x, y, 'rusher');
-          this.size = 10;
-          this.speed = 4;
-          this.color = '#ff3333';
-          this.rushTarget = null;
-          this.rushCooldown = 0;
-        }
-
-        ai() {
-          const now = Date.now();
-
-          if (now - this.rushCooldown > 3000) {
-            // 새로운 타겟 찾기
-            let closestPlayer = null;
-            let closestDistance = Infinity;
-
-            gameState.players.forEach((player) => {
-              if (player.alive) {
-                const distance = Math.sqrt(Math.pow(player.x - this.x, 2) + Math.pow(player.y - this.y, 2));
-                if (distance < closestDistance && distance < 300) {
-                  closestDistance = distance;
-                  closestPlayer = player;
+                // 기절 상태 체크
+                if (this.stunned && Date.now() - this.stunStart > 100) {
+                    this.stunned = false;
                 }
-              }
-            });
 
-            if (closestPlayer) {
-              this.rushTarget = { x: closestPlayer.x, y: closestPlayer.y };
-              this.rushCooldown = now;
+                // 키 입력 처리 (자신의 플레이어만, 기절 중이 아닐 때)
+                if (this.id === gameState.myPlayerId && !this.stunned) {
+                    let moved = false;
+                    if (gameState.keys['ArrowUp'] || gameState.keys['KeyW']) {
+                        this.y -= this.speed;
+                        moved = true;
+                    }
+                    if (gameState.keys['ArrowDown'] || gameState.keys['KeyS']) {
+                        this.y += this.speed;
+                        moved = true;
+                    }
+                    if (gameState.keys['ArrowLeft'] || gameState.keys['KeyA']) {
+                        this.x -= this.speed;
+                        moved = true;
+                    }
+                    if (gameState.keys['ArrowRight'] || gameState.keys['KeyD']) {
+                        this.x += this.speed;
+                        moved = true;
+                    }
+
+                    // 총알 발사 (스페이스바)
+                    if (gameState.keys['Space'] && this.bullets > 0 &&
+                        Date.now() - gameState.lastSpacePress > 200) {
+                        this.shootBullet();
+                        gameState.lastSpacePress = Date.now();
+                    }
+
+                    // 맵 확장
+                    if (moved) {
+                        const expandMargin = 200;
+                        if (this.x > gameState.mapSize.width - expandMargin) {
+                            gameState.mapSize.width = this.x + expandMargin;
+                        }
+                        if (this.y > gameState.mapSize.height - expandMargin) {
+                            gameState.mapSize.height = this.y + expandMargin;
+                        }
+                        if (this.x < expandMargin) {
+                            gameState.mapSize.width += expandMargin - this.x;
+                            const offset = expandMargin - this.x;
+                            gameState.players.forEach(p => p.x += offset);
+                            gameState.monsters.forEach(m => m.x += offset);
+                            gameState.bullets.forEach(b => b.x += offset);
+                            gameState.camera.x += offset;
+                        }
+                        if (this.y < expandMargin) {
+                            gameState.mapSize.height += expandMargin - this.y;
+                            const offset = expandMargin - this.y;
+                            gameState.players.forEach(p => p.y += offset);
+                            gameState.monsters.forEach(m => m.y += offset);
+                            gameState.bullets.forEach(b => b.y += offset);
+                            gameState.camera.y += offset;
+                        }
+                    }
+                }
+
+                // 무적 시간 체크
+                if (this.invulnerable && Date.now() - this.invulnerabilityStart > 3000) {
+                    this.invulnerable = false;
+                }
+
+                // 점수 및 총알 계산
+                this.score = Math.floor((Date.now() - gameState.gameStartTime) / 100);
+                this.bullets = Math.floor(this.score / 1000);
             }
-          }
 
-          if (this.rushTarget) {
-            const dx = this.rushTarget.x - this.x;
-            const dy = this.rushTarget.y - this.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+            shootBullet() {
+                if (this.bullets <= 0) return;
 
-            if (distance > 5) {
-              this.x += (dx / distance) * this.speed;
-              this.y += (dy / distance) * this.speed;
-            } else {
-              this.rushTarget = null;
+                // 가장 가까운 적 찾기 (다른 플레이어나 몬스터)
+                let closestTarget = null;
+                let closestDistance = Infinity;
+
+                // 다른 플레이어들 체크
+                gameState.players.forEach(player => {
+                    if (player.id !== this.id && player.alive) {
+                        const distance = Math.sqrt(
+                            Math.pow(player.x - this.x, 2) +
+                            Math.pow(player.y - this.y, 2)
+                        );
+                        if (distance < closestDistance && distance < 200) {
+                            closestDistance = distance;
+                            closestTarget = player;
+                        }
+                    }
+                });
+
+                // 몬스터들 체크
+                gameState.monsters.forEach(monster => {
+                    const distance = Math.sqrt(
+                        Math.pow(monster.x - this.x, 2) +
+                        Math.pow(monster.y - this.y, 2)
+                    );
+                    if (distance < closestDistance && distance < 200) {
+                        closestDistance = distance;
+                        closestTarget = monster;
+                    }
+                });
+
+                if (closestTarget) {
+                    const angle = Math.atan2(closestTarget.y - this.y, closestTarget.x - this.x);
+                    gameState.bullets.push(new Bullet(this.x, this.y, angle, this.id));
+                    this.bullets--;
+                }
             }
-          }
+
+            draw() {
+                const screenX = this.x - gameState.camera.x + canvas.width / 2;
+                const screenY = this.y - gameState.camera.y + canvas.height / 2;
+
+                // 무적 상태일 때 깜빡임 효과
+                if (this.invulnerable) {
+                    const blinkSpeed = 200;
+                    const isVisible = Math.floor(Date.now() / blinkSpeed) % 2 === 0;
+                    if (!isVisible) return;
+                }
+
+                // 기절 상태 효과
+                if (this.stunned) {
+                    ctx.save();
+                    ctx.translate(screenX, screenY);
+                    ctx.rotate(Math.sin(Date.now() * 0.05) * 0.2);
+                    ctx.translate(-screenX, -screenY);
+                }
+
+                // 플레이어 그리기
+                ctx.fillStyle = this.alive ? this.color : '#666666';
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 테두리
+                ctx.strokeStyle = this.alive ? '#ffffff' : '#333333';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 기절 상태 표시
+                if (this.stunned) {
+                    ctx.fillStyle = '#ffff00';
+                    ctx.font = '20px Courier New';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('⭐', screenX, screenY + 5);
+                    ctx.restore();
+                }
+
+                // 무적 상태 표시
+                if (this.invulnerable) {
+                    ctx.strokeStyle = '#ffff00';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, this.size + 5, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // 이름 표시
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '12px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.name, screenX, screenY - 15);
+
+                // 총알 개수 표시
+                if (this.bullets > 0) {
+                    ctx.fillStyle = '#00ff00';
+                    ctx.font = '10px Courier New';
+                    ctx.fillText(`🔫${this.bullets}`, screenX, screenY + 20);
+                }
+
+                // 죽은 플레이어 표시
+                if (!this.alive) {
+                    ctx.fillStyle = '#ff4444';
+                    ctx.font = '16px Courier New';
+                    ctx.fillText('💀', screenX, screenY + 5);
+                }
+            }
         }
 
-        drawShape(screenX, screenY) {
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
-          ctx.fill();
+        // 몬스터 베이스 클래스
+        class Monster {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.alive = true;
+                this.stunned = false;
+                this.stunStart = 0;
+                this.angle = 0;
+            }
 
-          // 스파이크들
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2;
-          for (let i = 0; i < 6; i++) {
-            const angle = (i / 6) * Math.PI * 2 + this.angle;
-            const startX = screenX + Math.cos(angle) * this.size;
-            const startY = screenY + Math.sin(angle) * this.size;
-            const endX = screenX + Math.cos(angle) * (this.size + 5);
-            const endY = screenY + Math.sin(angle) * (this.size + 5);
+            update() {
+                if (!this.alive) return;
 
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(endX, endY);
-            ctx.stroke();
-          }
-        }
-      }
+                // 기절 상태 체크
+                if (this.stunned && Date.now() - this.stunStart > 2000) {
+                    this.stunned = false;
+                }
 
-      // 패트롤러 (순찰형)
-      class Patroller extends Monster {
-        constructor(x, y) {
-          super(x, y, 'patroller');
-          this.size = 12;
-          this.speed = 2;
-          this.color = '#9933ff';
-          this.patrolTarget = { x: x + Math.random() * 200 - 100, y: y + Math.random() * 200 - 100 };
-          this.patrolRadius = 150;
-          this.centerX = x;
-          this.centerY = y;
-        }
+                if (!this.stunned) {
+                    this.ai();
+                }
 
-        ai() {
-          // 순찰 지점으로 이동
-          const dx = this.patrolTarget.x - this.x;
-          const dy = this.patrolTarget.y - this.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
+                this.angle += 0.1;
+            }
 
-          if (distance < 20) {
-            // 새로운 순찰 지점 설정
-            const angle = Math.random() * Math.PI * 2;
-            this.patrolTarget = {
-              x: this.centerX + Math.cos(angle) * this.patrolRadius,
-              y: this.centerY + Math.sin(angle) * this.patrolRadius,
-            };
-          } else {
-            this.x += (dx / distance) * this.speed;
-            this.y += (dy / distance) * this.speed;
-          }
-        }
+            ai() {
+                // 각 몬스터 타입별로 오버라이드
+            }
 
-        drawShape(screenX, screenY) {
-          // 사각형 몸체
-          ctx.save();
-          ctx.translate(screenX, screenY);
-          ctx.rotate(this.angle);
+            draw() {
+                const screenX = this.x - gameState.camera.x + canvas.width / 2;
+                const screenY = this.y - gameState.camera.y + canvas.height / 2;
 
-          ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(-this.size / 2, -this.size / 2, this.size, this.size);
+                // 화면 밖이면 그리지 않음
+                if (screenX < -50 || screenX > canvas.width + 50 ||
+                    screenY < -50 || screenY > canvas.height + 50) {
+                    return;
+                }
 
-          // 중앙 점
-          ctx.fillStyle = '#ffffff';
-          ctx.beginPath();
-          ctx.arc(0, 0, 3, 0, Math.PI * 2);
-          ctx.fill();
+                if (this.stunned) {
+                    ctx.save();
+                    ctx.translate(screenX, screenY);
+                    ctx.rotate(Math.sin(Date.now() * 0.02) * 0.3);
+                    ctx.translate(-screenX, -screenY);
+                    ctx.fillStyle = '#666666';
+                } else {
+                    ctx.fillStyle = this.color;
+                }
 
-          ctx.restore();
-        }
-      }
+                this.drawShape(screenX, screenY);
 
-      // 총알 클래스
-      class Bullet {
-        constructor(x, y, angle, shooterId) {
-          this.x = x;
-          this.y = y;
-          this.angle = angle;
-          this.speed = 8;
-          this.shooterId = shooterId;
-          this.size = 3;
-          this.life = 1000; // 1초 후 소멸
-          this.createTime = Date.now();
+                if (this.stunned) {
+                    ctx.fillStyle = '#ffff00';
+                    ctx.font = '16px Courier New';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('💫', screenX, screenY - 20);
+                    ctx.restore();
+                }
+            }
         }
 
-        update() {
-          this.x += Math.cos(this.angle) * this.speed;
-          this.y += Math.sin(this.angle) * this.speed;
+        // 옵저버 (추적형)
+        class Observer extends Monster {
+            constructor(x, y) {
+                super(x, y, 'observer');
+                this.size = 15;
+                this.speed = 1.5;
+                this.color = '#ff6600';
+            }
 
-          // 수명 체크
-          if (Date.now() - this.createTime > this.life) {
-            return false; // 제거 신호
-          }
+            ai() {
+                // 가장 가까운 살아있는 플레이어를 추적
+                let closestPlayer = null;
+                let closestDistance = Infinity;
 
-          return true;
+                gameState.players.forEach(player => {
+                    if (player.alive && !player.invulnerable) {
+                        const distance = Math.sqrt(
+                            Math.pow(player.x - this.x, 2) +
+                            Math.pow(player.y - this.y, 2)
+                        );
+                        if (distance < closestDistance) {
+                            closestDistance = distance;
+                            closestPlayer = player;
+                        }
+                    }
+                });
+
+                if (closestPlayer) {
+                    const dx = closestPlayer.x - this.x;
+                    const dy = closestPlayer.y - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance > 0) {
+                        this.x += (dx / distance) * this.speed;
+                        this.y += (dy / distance) * this.speed;
+                    }
+                }
+            }
+
+            drawShape(screenX, screenY) {
+                ctx.save();
+                ctx.translate(screenX, screenY);
+                ctx.rotate(this.angle);
+
+                ctx.beginPath();
+                ctx.ellipse(0, 0, this.size, this.size * 0.8, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#ffaa44';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#00ffff';
+                ctx.beginPath();
+                ctx.arc(0, 0, this.size * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(Math.cos(angle) * this.size, Math.sin(angle) * this.size);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
         }
 
-        draw() {
-          const screenX = this.x - gameState.camera.x + canvas.width / 2;
-          const screenY = this.y - gameState.camera.y + canvas.height / 2;
+        // 러셔 (빠른 돌진형)
+        class Rusher extends Monster {
+            constructor(x, y) {
+                super(x, y, 'rusher');
+                this.size = 10;
+                this.speed = 4;
+                this.color = '#ff3333';
+                this.rushTarget = null;
+                this.rushCooldown = 0;
+            }
 
-          ctx.fillStyle = '#ffff00';
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
-          ctx.fill();
+            ai() {
+                const now = Date.now();
 
-          // 꼬리 효과
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(screenX, screenY);
-          ctx.lineTo(screenX - Math.cos(this.angle) * 10, screenY - Math.sin(this.angle) * 10);
-          ctx.stroke();
+                if (now - this.rushCooldown > 3000) {
+                    // 새로운 타겟 찾기
+                    let closestPlayer = null;
+                    let closestDistance = Infinity;
+
+                    gameState.players.forEach(player => {
+                        if (player.alive) {
+                            const distance = Math.sqrt(
+                                Math.pow(player.x - this.x, 2) +
+                                Math.pow(player.y - this.y, 2)
+                            );
+                            if (distance < closestDistance && distance < 300) {
+                                closestDistance = distance;
+                                closestPlayer = player;
+                            }
+                        }
+                    });
+
+                    if (closestPlayer) {
+                        this.rushTarget = { x: closestPlayer.x, y: closestPlayer.y };
+                        this.rushCooldown = now;
+                    }
+                }
+
+                if (this.rushTarget) {
+                    const dx = this.rushTarget.x - this.x;
+                    const dy = this.rushTarget.y - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance > 5) {
+                        this.x += (dx / distance) * this.speed;
+                        this.y += (dy / distance) * this.speed;
+                    } else {
+                        this.rushTarget = null;
+                    }
+                }
+            }
+
+            drawShape(screenX, screenY) {
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 스파이크들
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i / 6) * Math.PI * 2 + this.angle;
+                    const startX = screenX + Math.cos(angle) * this.size;
+                    const startY = screenY + Math.sin(angle) * this.size;
+                    const endX = screenX + Math.cos(angle) * (this.size + 5);
+                    const endY = screenY + Math.sin(angle) * (this.size + 5);
+
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                }
+            }
         }
-      }
 
-      // 게임 참가
-      function joinGame() {
-        const nameInput = document.getElementById('playerName');
-        const name = nameInput.value.trim();
+        // 패트롤러 (순찰형)
+        class Patroller extends Monster {
+            constructor(x, y) {
+                super(x, y, 'patroller');
+                this.size = 12;
+                this.speed = 2;
+                this.color = '#9933ff';
+                this.patrolTarget = { x: x + Math.random() * 200 - 100, y: y + Math.random() * 200 - 100 };
+                this.patrolRadius = 150;
+                this.centerX = x;
+                this.centerY = y;
+            }
 
-        if (!name) {
-          alert('닉네임을 입력하세요!');
-          return;
+            ai() {
+                // 순찰 지점으로 이동
+                const dx = this.patrolTarget.x - this.x;
+                const dy = this.patrolTarget.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < 20) {
+                    // 새로운 순찰 지점 설정
+                    const angle = Math.random() * Math.PI * 2;
+                    this.patrolTarget = {
+                        x: this.centerX + Math.cos(angle) * this.patrolRadius,
+                        y: this.centerY + Math.sin(angle) * this.patrolRadius
+                    };
+                } else {
+                    this.x += (dx / distance) * this.speed;
+                    this.y += (dy / distance) * this.speed;
+                }
+            }
+
+            drawShape(screenX, screenY) {
+                // 사각형 몸체
+                ctx.save();
+                ctx.translate(screenX, screenY);
+                ctx.rotate(this.angle);
+
+                ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
+
+                // 중앙 점
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(0, 0, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
         }
 
-        // UI 전환
-        document.getElementById('joinForm').style.display = 'none';
-        document.getElementById('gameCanvas').style.display = 'block';
-        document.getElementById('gameUI').style.display = 'block';
-        document.getElementById('playerList').style.display = 'block';
-        document.getElementById('instructions').style.display = 'block';
+        // 총알 클래스
+        class Bullet {
+            constructor(x, y, angle, shooterId) {
+                this.x = x;
+                this.y = y;
+                this.angle = angle;
+                this.speed = 8;
+                this.shooterId = shooterId;
+                this.size = 3;
+                this.life = 1000; // 1초 후 소멸
+                this.createTime = Date.now();
+            }
 
-        // 플레이어 생성
-        const playerId = 'player_' + Date.now() + '_' + Math.random();
-        const playerColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
-        const startX = Math.random() * (canvas.width - 100) + 50;
-        const startY = Math.random() * (canvas.height - 100) + 50;
+            update() {
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
 
-        const player = new Player(playerId, name, startX, startY, playerColor);
-        gameState.players.set(playerId, player);
-        gameState.myPlayerId = playerId;
-        gameState.gameRunning = true;
-        gameState.gameStartTime = Date.now();
+                // 수명 체크
+                if (Date.now() - this.createTime > this.life) {
+                    return false; // 제거 신호
+                }
 
-        // 다른 플레이어들 시뮬레이션 (실제 멀티플레이어에서는 서버에서 관리)
-        addRandomPlayers();
+                return true;
+            }
 
-        // 게임 루프 시작
-        gameLoop();
-      }
+            draw() {
+                const screenX = this.x - gameState.camera.x + canvas.width / 2;
+                const screenY = this.y - gameState.camera.y + canvas.height / 2;
 
-      // 랜덤 플레이어 추가 (시뮬레이션)
-      function addRandomPlayers() {
-        const botNames = ['AI전사', '로봇파일럿', '사이버닌자', '디지털헌터', '네온러너'];
+                ctx.fillStyle = '#ffff00';
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
+                ctx.fill();
 
-        for (let i = 0; i < 3; i++) {
-          setTimeout(() => {
-            const botId = 'bot_' + i + '_' + Date.now();
-            const botName = botNames[i] + Math.floor(Math.random() * 100);
-            const botColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+                // 꼬리 효과
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(screenX, screenY);
+                ctx.lineTo(
+                    screenX - Math.cos(this.angle) * 10,
+                    screenY - Math.sin(this.angle) * 10
+                );
+                ctx.stroke();
+            }
+        }
+
+        // 게임 참가
+        function joinGame() {
+            const nameInput = document.getElementById('playerName');
+            const name = nameInput.value.trim();
+
+            if (!name) {
+                alert('닉네임을 입력하세요!');
+                return;
+            }
+
+            // UI 전환
+            document.getElementById('joinForm').style.display = 'none';
+            document.getElementById('gameCanvas').style.display = 'block';
+            document.getElementById('gameUI').style.display = 'block';
+            document.getElementById('playerList').style.display = 'block';
+            document.getElementById('instructions').style.display = 'block';
+
+            // 플레이어 생성
+            const playerId = 'player_' + Date.now() + '_' + Math.random();
+            const playerColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
             const startX = Math.random() * (canvas.width - 100) + 50;
             const startY = Math.random() * (canvas.height - 100) + 50;
 
-            const bot = new Player(botId, botName, startX, startY, botColor);
-            gameState.players.set(botId, bot);
-            updatePlayerList();
-          }, i * 2000);
+            const player = new Player(playerId, name, startX, startY, playerColor);
+            gameState.players.set(playerId, player);
+            gameState.myPlayerId = playerId;
+            gameState.gameRunning = true;
+            gameState.gameStartTime = Date.now();
+
+            // 다른 플레이어들 시뮬레이션 (실제 멀티플레이어에서는 서버에서 관리)
+            addRandomPlayers();
+
+            // 게임 루프 시작
+            gameLoop();
         }
-      }
 
-      // AI 플레이어 이동 (시뮬레이션)
-      function updateBots() {
-        gameState.players.forEach((player) => {
-          if (player.id !== gameState.myPlayerId && player.alive && !player.stunned) {
-            // 가장 가까운 몬스터 찾기
-            let closestMonster = null;
-            let closestDistance = Infinity;
+        // 랜덤 플레이어 추가 (시뮬레이션)
+        function addRandomPlayers() {
+            const botNames = ['AI전사', '로봇파일럿', '사이버닌자', '디지털헌터', '네온러너'];
 
-            gameState.monsters.forEach((monster) => {
-              if (!monster.stunned) {
-                const distance = Math.sqrt(Math.pow(monster.x - player.x, 2) + Math.pow(monster.y - player.y, 2));
-                if (distance < closestDistance) {
-                  closestDistance = distance;
-                  closestMonster = monster;
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    const botId = 'bot_' + i + '_' + Date.now();
+                    const botName = botNames[i] + (Math.floor(Math.random() * 100));
+                    const botColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+                    const startX = Math.random() * (canvas.width - 100) + 50;
+                    const startY = Math.random() * (canvas.height - 100) + 50;
+
+                    const bot = new Player(botId, botName, startX, startY, botColor);
+                    gameState.players.set(botId, bot);
+                    updatePlayerList();
+                }, i * 2000);
+            }
+        }
+
+        // AI 플레이어 이동 (시뮬레이션)
+        function updateBots() {
+            gameState.players.forEach(player => {
+                if (player.id !== gameState.myPlayerId && player.alive && !player.stunned) {
+                    // 가장 가까운 몬스터 찾기
+                    let closestMonster = null;
+                    let closestDistance = Infinity;
+
+                    gameState.monsters.forEach(monster => {
+                        if (!monster.stunned) {
+                            const distance = Math.sqrt(
+                                Math.pow(monster.x - player.x, 2) +
+                                Math.pow(monster.y - player.y, 2)
+                            );
+                            if (distance < closestDistance) {
+                                closestDistance = distance;
+                                closestMonster = monster;
+                            }
+                        }
+                    });
+
+                    // 몬스터가 가까우면 도망
+                    if (closestMonster && closestDistance < 80) {
+                        const dx = player.x - closestMonster.x;
+                        const dy = player.y - closestMonster.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance > 0) {
+                            player.x += (dx / distance) * player.speed;
+                            player.y += (dy / distance) * player.speed;
+                        }
+                    } else {
+                        // 랜덤 이동
+                        if (Math.random() < 0.02) {
+                            const angle = Math.random() * Math.PI * 2;
+                            player.x += Math.cos(angle) * player.speed;
+                            player.y += Math.sin(angle) * player.speed;
+                        }
+                    }
+
+                    // 봇 총알 발사 (가끔)
+                    if (Math.random() < 0.005 && player.bullets > 0) {
+                        // 가장 가까운 적 찾기
+                        let closestTarget = null;
+                        let closestTargetDistance = Infinity;
+
+                        gameState.players.forEach(otherPlayer => {
+                            if (otherPlayer.id !== player.id && otherPlayer.alive) {
+                                const distance = Math.sqrt(
+                                    Math.pow(otherPlayer.x - player.x, 2) +
+                                    Math.pow(otherPlayer.y - player.y, 2)
+                                );
+                                if (distance < closestTargetDistance && distance < 150) {
+                                    closestTargetDistance = distance;
+                                    closestTarget = otherPlayer;
+                                }
+                            }
+                        });
+
+                        if (closestTarget) {
+                            const angle = Math.atan2(closestTarget.y - player.y, closestTarget.x - player.x);
+                            gameState.bullets.push(new Bullet(player.x, player.y, angle, player.id));
+                            player.bullets--;
+                        }
+                    }
                 }
-              }
+            });
+        }
+
+        // 몬스터 스폰
+        function spawnMonster() {
+            const now = Date.now();
+            const timeSinceStart = (now - gameState.gameStartTime) / 1000;
+            const spawnInterval = Math.max(2000 - (timeSinceStart * 50), 500);
+
+            if (now - gameState.lastMonsterSpawn > spawnInterval) {
+                const myPlayer = gameState.players.get(gameState.myPlayerId);
+                if (!myPlayer) return;
+
+                const spawnDistance = 300;
+                const angle = Math.random() * Math.PI * 2;
+                const x = myPlayer.x + Math.cos(angle) * spawnDistance;
+                const y = myPlayer.y + Math.sin(angle) * spawnDistance;
+
+                // 랜덤 몬스터 타입 생성
+                const monsterTypes = [Observer, Rusher, Patroller];
+                const weights = [0.5, 0.3, 0.2]; // 옵저버가 가장 많이 스폰
+
+                let random = Math.random();
+                let MonsterClass = Observer;
+
+                for (let i = 0; i < weights.length; i++) {
+                    if (random < weights[i]) {
+                        MonsterClass = monsterTypes[i];
+                        break;
+                    }
+                    random -= weights[i];
+                }
+
+                gameState.monsters.push(new MonsterClass(x, y));
+                gameState.lastMonsterSpawn = now;
+            }
+        }
+
+        // 충돌 체크
+        function checkCollisions() {
+            // 플레이어와 몬스터 충돌
+            gameState.players.forEach(player => {
+                if (!player.alive || player.invulnerable) return;
+
+                gameState.monsters.forEach(monster => {
+                    if (!monster.alive) return;
+
+                    const distance = Math.sqrt(
+                        Math.pow(player.x - monster.x, 2) +
+                        Math.pow(player.y - monster.y, 2)
+                    );
+
+                    if (distance < player.size + monster.size - 5) {
+                        player.alive = false;
+
+                        if (player.id === gameState.myPlayerId) {
+                            showGameOver();
+                        }
+                    }
+                });
             });
 
-            // 몬스터가 가까우면 도망
-            if (closestMonster && closestDistance < 80) {
-              const dx = player.x - closestMonster.x;
-              const dy = player.y - closestMonster.y;
-              const distance = Math.sqrt(dx * dx + dy * dy);
+            // 플레이어끼리 충돌 (기절)
+            const playerArray = Array.from(gameState.players.values());
+            for (let i = 0; i < playerArray.length; i++) {
+                for (let j = i + 1; j < playerArray.length; j++) {
+                    const p1 = playerArray[i];
+                    const p2 = playerArray[j];
 
-              if (distance > 0) {
-                player.x += (dx / distance) * player.speed;
-                player.y += (dy / distance) * player.speed;
-              }
-            } else {
-              // 랜덤 이동
-              if (Math.random() < 0.02) {
-                const angle = Math.random() * Math.PI * 2;
-                player.x += Math.cos(angle) * player.speed;
-                player.y += Math.sin(angle) * player.speed;
-              }
-            }
+                    if (!p1.alive || !p2.alive) continue;
 
-            // 봇 총알 발사 (가끔)
-            if (Math.random() < 0.005 && player.bullets > 0) {
-              // 가장 가까운 적 찾기
-              let closestTarget = null;
-              let closestTargetDistance = Infinity;
+                    const distance = Math.sqrt(
+                        Math.pow(p1.x - p2.x, 2) +
+                        Math.pow(p1.y - p2.y, 2)
+                    );
 
-              gameState.players.forEach((otherPlayer) => {
-                if (otherPlayer.id !== player.id && otherPlayer.alive) {
-                  const distance = Math.sqrt(
-                    Math.pow(otherPlayer.x - player.x, 2) + Math.pow(otherPlayer.y - player.y, 2)
-                  );
-                  if (distance < closestTargetDistance && distance < 150) {
-                    closestTargetDistance = distance;
-                    closestTarget = otherPlayer;
-                  }
+                    if (distance < p1.size + p2.size) {
+                        // 둘 다 기절
+                        p1.stunned = true;
+                        p1.stunStart = Date.now();
+                        p2.stunned = true;
+                        p2.stunStart = Date.now();
+
+                        // 서로 밀어냄
+                        const pushForce = 20;
+                        const dx = p2.x - p1.x;
+                        const dy = p2.y - p1.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+
+                        if (dist > 0) {
+                            p1.x -= (dx / dist) * pushForce;
+                            p1.y -= (dy / dist) * pushForce;
+                            p2.x += (dx / dist) * pushForce;
+                            p2.y += (dy / dist) * pushForce;
+                        }
+                    }
                 }
-              });
-
-              if (closestTarget) {
-                const angle = Math.atan2(closestTarget.y - player.y, closestTarget.x - player.x);
-                gameState.bullets.push(new Bullet(player.x, player.y, angle, player.id));
-                player.bullets--;
-              }
             }
-          }
-        });
-      }
 
-      // 몬스터 스폰
-      function spawnMonster() {
-        const now = Date.now();
-        const timeSinceStart = (now - gameState.gameStartTime) / 1000;
-        const spawnInterval = Math.max(2000 - timeSinceStart * 50, 500);
+            // 총알 충돌
+            gameState.bullets.forEach((bullet, bulletIndex) => {
+                // 플레이어와 총알 충돌
+                gameState.players.forEach(player => {
+                    if (player.id === bullet.shooterId || !player.alive) return;
 
-        if (now - gameState.lastMonsterSpawn > spawnInterval) {
-          const myPlayer = gameState.players.get(gameState.myPlayerId);
-          if (!myPlayer) return;
+                    const distance = Math.sqrt(
+                        Math.pow(player.x - bullet.x, 2) +
+                        Math.pow(player.y - bullet.y, 2)
+                    );
 
-          const spawnDistance = 300;
-          const angle = Math.random() * Math.PI * 2;
-          const x = myPlayer.x + Math.cos(angle) * spawnDistance;
-          const y = myPlayer.y + Math.sin(angle) * spawnDistance;
+                    if (distance < player.size + bullet.size) {
+                        player.stunned = true;
+                        player.stunStart = Date.now();
+                        gameState.bullets.splice(bulletIndex, 1);
+                    }
+                });
 
-          // 랜덤 몬스터 타입 생성
-          const monsterTypes = [Observer, Rusher, Patroller];
-          const weights = [0.5, 0.3, 0.2]; // 옵저버가 가장 많이 스폰
+                // 몬스터와 총알 충돌
+                gameState.monsters.forEach((monster, monsterIndex) => {
+                    if (!monster.alive) return;
 
-          let random = Math.random();
-          let MonsterClass = Observer;
+                    const distance = Math.sqrt(
+                        Math.pow(monster.x - bullet.x, 2) +
+                        Math.pow(monster.y - bullet.y, 2)
+                    );
 
-          for (let i = 0; i < weights.length; i++) {
-            if (random < weights[i]) {
-              MonsterClass = monsterTypes[i];
-              break;
-            }
-            random -= weights[i];
-          }
-
-          gameState.monsters.push(new MonsterClass(x, y));
-          gameState.lastMonsterSpawn = now;
-        }
-      }
-
-      // 충돌 체크
-      function checkCollisions() {
-        // 플레이어와 몬스터 충돌
-        gameState.players.forEach((player) => {
-          if (!player.alive || player.invulnerable) return;
-
-          gameState.monsters.forEach((monster) => {
-            if (!monster.alive) return;
-
-            const distance = Math.sqrt(Math.pow(player.x - monster.x, 2) + Math.pow(player.y - monster.y, 2));
-
-            if (distance < player.size + monster.size - 5) {
-              player.alive = false;
-
-              if (player.id === gameState.myPlayerId) {
-                showGameOver();
-              }
-            }
-          });
-        });
-
-        // 플레이어끼리 충돌 (기절)
-        const playerArray = Array.from(gameState.players.values());
-        for (let i = 0; i < playerArray.length; i++) {
-          for (let j = i + 1; j < playerArray.length; j++) {
-            const p1 = playerArray[i];
-            const p2 = playerArray[j];
-
-            if (!p1.alive || !p2.alive) continue;
-
-            const distance = Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-
-            if (distance < p1.size + p2.size) {
-              // 둘 다 기절
-              p1.stunned = true;
-              p1.stunStart = Date.now();
-              p2.stunned = true;
-              p2.stunStart = Date.now();
-
-              // 서로 밀어냄
-              const pushForce = 20;
-              const dx = p2.x - p1.x;
-              const dy = p2.y - p1.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-
-              if (dist > 0) {
-                p1.x -= (dx / dist) * pushForce;
-                p1.y -= (dy / dist) * pushForce;
-                p2.x += (dx / dist) * pushForce;
-                p2.y += (dy / dist) * pushForce;
-              }
-            }
-          }
+                    if (distance < monster.size + bullet.size) {
+                        monster.stunned = true;
+                        monster.stunStart = Date.now();
+                        gameState.bullets.splice(bulletIndex, 1);
+                    }
+                });
+            });
         }
 
-        // 총알 충돌
-        gameState.bullets.forEach((bullet, bulletIndex) => {
-          // 플레이어와 총알 충돌
-          gameState.players.forEach((player) => {
-            if (player.id === bullet.shooterId || !player.alive) return;
+        // 게임 오버 화면
+        function showGameOver() {
+            const myPlayer = gameState.players.get(gameState.myPlayerId);
+            document.getElementById('finalScore').textContent =
+                `최종 점수: ${myPlayer.score}점 (생존 시간: ${Math.floor(myPlayer.score / 10)}초)`;
+            document.getElementById('gameOver').style.display = 'block';
+            gameState.gameRunning = false;
+        }
 
-            const distance = Math.sqrt(Math.pow(player.x - bullet.x, 2) + Math.pow(player.y - bullet.y, 2));
+        // 리스폰
+        function respawn() {
+            const myPlayer = gameState.players.get(gameState.myPlayerId);
+            myPlayer.alive = true;
+            myPlayer.invulnerable = true;
+            myPlayer.invulnerabilityStart = Date.now();
 
-            if (distance < player.size + bullet.size) {
-              player.stunned = true;
-              player.stunStart = Date.now();
-              gameState.bullets.splice(bulletIndex, 1);
-            }
-          });
+            // 안전한 위치 찾기
+            let safeX, safeY;
+            let attempts = 0;
+            do {
+                safeX = myPlayer.x + (Math.random() - 0.5) * 200;
+                safeY = myPlayer.y + (Math.random() - 0.5) * 200;
+                attempts++;
+            } while (attempts < 20 && isTooCloseToMonsters(safeX, safeY));
 
-          // 몬스터와 총알 충돌
-          gameState.monsters.forEach((monster, monsterIndex) => {
-            if (!monster.alive) return;
+            myPlayer.x = safeX;
+            myPlayer.y = safeY;
 
-            const distance = Math.sqrt(Math.pow(monster.x - bullet.x, 2) + Math.pow(monster.y - bullet.y, 2));
+            document.getElementById('gameOver').style.display = 'none';
+            gameState.gameRunning = true;
+            gameState.gameStartTime = Date.now();
+        }
 
-            if (distance < monster.size + bullet.size) {
-              monster.stunned = true;
-              monster.stunStart = Date.now();
-              gameState.bullets.splice(bulletIndex, 1);
-            }
-          });
-        });
-      }
+        // 몬스터와 너무 가까운지 확인
+        function isTooCloseToMonsters(x, y) {
+            return gameState.monsters.some(monster => {
+                const distance = Math.sqrt(
+                    Math.pow(x - monster.x, 2) +
+                    Math.pow(y - monster.y, 2)
+                );
+                return distance < 100;
+            });
+        }
 
-      // 게임 오버 화면
-      function showGameOver() {
-        const myPlayer = gameState.players.get(gameState.myPlayerId);
-        document.getElementById('finalScore').textContent = `최종 점수: ${myPlayer.score}점 (생존 시간: ${Math.floor(
-          myPlayer.score / 10
-        )}초)`;
-        document.getElementById('gameOver').style.display = 'block';
-        gameState.gameRunning = false;
-      }
+        // 플레이어 목록 업데이트
+        function updatePlayerList() {
+            const playersDiv = document.getElementById('players');
+            playersDiv.innerHTML = '';
 
-      // 리스폰
-      function respawn() {
-        const myPlayer = gameState.players.get(gameState.myPlayerId);
-        myPlayer.alive = true;
-        myPlayer.invulnerable = true;
-        myPlayer.invulnerabilityStart = Date.now();
+            const sortedPlayers = Array.from(gameState.players.values())
+                .sort((a, b) => b.score - a.score);
 
-        // 안전한 위치 찾기
-        let safeX, safeY;
-        let attempts = 0;
-        do {
-          safeX = myPlayer.x + (Math.random() - 0.5) * 200;
-          safeY = myPlayer.y + (Math.random() - 0.5) * 200;
-          attempts++;
-        } while (attempts < 20 && isTooCloseToMonsters(safeX, safeY));
-
-        myPlayer.x = safeX;
-        myPlayer.y = safeY;
-
-        document.getElementById('gameOver').style.display = 'none';
-        gameState.gameRunning = true;
-        gameState.gameStartTime = Date.now();
-      }
-
-      // 몬스터와 너무 가까운지 확인
-      function isTooCloseToMonsters(x, y) {
-        return gameState.monsters.some((monster) => {
-          const distance = Math.sqrt(Math.pow(x - monster.x, 2) + Math.pow(y - monster.y, 2));
-          return distance < 100;
-        });
-      }
-
-      // 플레이어 목록 업데이트
-      function updatePlayerList() {
-        const playersDiv = document.getElementById('players');
-        playersDiv.innerHTML = '';
-
-        const sortedPlayers = Array.from(gameState.players.values()).sort((a, b) => b.score - a.score);
-
-        sortedPlayers.forEach((player, index) => {
-          const playerDiv = document.createElement('div');
-          playerDiv.style.color = player.color;
-          playerDiv.style.margin = '2px 0';
-          playerDiv.innerHTML = `
+            sortedPlayers.forEach((player, index) => {
+                const playerDiv = document.createElement('div');
+                playerDiv.style.color = player.color;
+                playerDiv.style.margin = '2px 0';
+                playerDiv.innerHTML = `
                     ${index + 1}. ${player.name}
                     ${player.alive ? '🟢' : '💀'}
                     (${player.score}점)
                 `;
-          playersDiv.appendChild(playerDiv);
-        });
-      }
-
-      // UI 업데이트
-      function updateUI() {
-        if (!gameState.gameRunning) return;
-
-        const timeSurvived = Math.floor((Date.now() - gameState.gameStartTime) / 1000);
-        document.getElementById('timeDisplay').textContent = timeSurvived;
-        document.getElementById('observerCount').textContent = gameState.monsters.length;
-
-        const myPlayer = gameState.players.get(gameState.myPlayerId);
-        if (myPlayer) {
-          document.getElementById('myScore').textContent = myPlayer.score;
-        }
-      }
-
-      // 카메라 업데이트
-      function updateCamera() {
-        const myPlayer = gameState.players.get(gameState.myPlayerId);
-        if (myPlayer && myPlayer.alive) {
-          // 부드러운 카메라 추적
-          const lerp = 0.1;
-          gameState.camera.x += (myPlayer.x - gameState.camera.x) * lerp;
-          gameState.camera.y += (myPlayer.y - gameState.camera.y) * lerp;
-        }
-      }
-
-      // 게임 루프
-      function gameLoop() {
-        if (!gameState.gameRunning) {
-          requestAnimationFrame(gameLoop);
-          return;
+                playersDiv.appendChild(playerDiv);
+            });
         }
 
-        // 화면 완전히 클리어 (잔상 효과 최소화)
-        ctx.fillStyle = '#000428';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // UI 업데이트
+        function updateUI() {
+            if (!gameState.gameRunning) return;
 
-        // 배경 별들 효과 (카메라 기준)
-        for (let i = 0; i < 100; i++) {
-          const starX = (Math.sin(i * 12.9898) * 43758.5453) % gameState.mapSize.width;
-          const starY = (Math.cos(i * 78.233) * 43758.5453) % gameState.mapSize.height;
-          const screenX = starX - gameState.camera.x + canvas.width / 2;
-          const screenY = starY - gameState.camera.y + canvas.height / 2;
+            const timeSurvived = Math.floor((Date.now() - gameState.gameStartTime) / 1000);
+            document.getElementById('timeDisplay').textContent = timeSurvived;
+            document.getElementById('observerCount').textContent = gameState.monsters.length;
 
-          if (screenX >= 0 && screenX <= canvas.width && screenY >= 0 && screenY <= canvas.height) {
-            ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + Math.sin(i) * 0.2})`;
-            ctx.fillRect(screenX, screenY, 1, 1);
-          }
+            const myPlayer = gameState.players.get(gameState.myPlayerId);
+            if (myPlayer) {
+                document.getElementById('myScore').textContent = myPlayer.score;
+            }
         }
 
         // 카메라 업데이트
-        updateCamera();
-
-        // 몬스터 스폰
-        spawnMonster();
-
-        // 플레이어 업데이트
-        gameState.players.forEach((player) => player.update());
-
-        // 봇 업데이트
-        updateBots();
-
-        // 몬스터 업데이트
-        gameState.monsters.forEach((monster) => monster.update());
-
-        // 총알 업데이트
-        gameState.bullets = gameState.bullets.filter((bullet) => bullet.update());
-
-        // 충돌 체크
-        checkCollisions();
-
-        // 그리기
-        gameState.monsters.forEach((monster) => monster.draw());
-        gameState.bullets.forEach((bullet) => bullet.draw());
-        gameState.players.forEach((player) => player.draw());
-
-        // UI 업데이트
-        updateUI();
-        updatePlayerList();
-
-        // 너무 멀리 있는 몬스터 제거 (최적화)
-        const myPlayer = gameState.players.get(gameState.myPlayerId);
-        if (myPlayer) {
-          gameState.monsters = gameState.monsters.filter((monster) => {
-            const distance = Math.sqrt(Math.pow(monster.x - myPlayer.x, 2) + Math.pow(monster.y - myPlayer.y, 2));
-            return distance < 800;
-          });
+        function updateCamera() {
+            const myPlayer = gameState.players.get(gameState.myPlayerId);
+            if (myPlayer && myPlayer.alive) {
+                // 부드러운 카메라 추적
+                const lerp = 0.1;
+                gameState.camera.x += (myPlayer.x - gameState.camera.x) * lerp;
+                gameState.camera.y += (myPlayer.y - gameState.camera.y) * lerp;
+            }
         }
 
-        requestAnimationFrame(gameLoop);
-      }
+        // 게임 루프
+        function gameLoop() {
+            if (!gameState.gameRunning) {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
 
-      // 키보드 이벤트
-      document.addEventListener('keydown', (e) => {
-        gameState.keys[e.code] = true;
-      });
+            // 화면 완전히 클리어 (잔상 효과 최소화)
+            ctx.fillStyle = '#000428';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      document.addEventListener('keyup', (e) => {
-        gameState.keys[e.code] = false;
-      });
+            // 배경 별들 효과 (카메라 기준)
+            for (let i = 0; i < 100; i++) {
+                const starX = (Math.sin(i * 12.9898) * 43758.5453) % gameState.mapSize.width;
+                const starY = (Math.cos(i * 78.233) * 43758.5453) % gameState.mapSize.height;
+                const screenX = starX - gameState.camera.x + canvas.width / 2;
+                const screenY = starY - gameState.camera.y + canvas.height / 2;
 
-      // 창 크기 변경 시 캔버스 크기 조정
-      window.addEventListener('resize', () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      });
+                if (screenX >= 0 && screenX <= canvas.width &&
+                    screenY >= 0 && screenY <= canvas.height) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + Math.sin(i) * 0.2})`;
+                    ctx.fillRect(screenX, screenY, 1, 1);
+                }
+            }
+
+            // 카메라 업데이트
+            updateCamera();
+
+            // 몬스터 스폰
+            spawnMonster();
+
+            // 플레이어 업데이트
+            gameState.players.forEach(player => player.update());
+
+            // 봇 업데이트
+            updateBots();
+
+            // 몬스터 업데이트
+            gameState.monsters.forEach(monster => monster.update());
+
+            // 총알 업데이트
+            gameState.bullets = gameState.bullets.filter(bullet => bullet.update());
+
+            // 충돌 체크
+            checkCollisions();
+
+            // 그리기
+            gameState.monsters.forEach(monster => monster.draw());
+            gameState.bullets.forEach(bullet => bullet.draw());
+            gameState.players.forEach(player => player.draw());
+
+            // UI 업데이트
+            updateUI();
+            updatePlayerList();
+
+            // 너무 멀리 있는 몬스터 제거 (최적화)
+            const myPlayer = gameState.players.get(gameState.myPlayerId);
+            if (myPlayer) {
+                gameState.monsters = gameState.monsters.filter(monster => {
+                    const distance = Math.sqrt(
+                        Math.pow(monster.x - myPlayer.x, 2) +
+                        Math.pow(monster.y - myPlayer.y, 2)
+                    );
+                    return distance < 800;
+                });
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 키보드 이벤트
+        document.addEventListener('keydown', (e) => {
+            gameState.keys[e.code] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            gameState.keys[e.code] = false;
+        });
+
+        // 창 크기 변경 시 캔버스 크기 조정
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
     </script>
-  </body>
+</body>
 </html>
