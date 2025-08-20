@@ -164,6 +164,11 @@
             <div>생존 시간: <span id="timeDisplay">0</span>초</div>
             <div>몬스터 수: <span id="observerCount">0</span></div>
             <div>내 점수: <span id="myScore">0</span></div>
+            <div id="levelControl" style="display: none;">
+                <div>레벨: <span id="levelDisplay">1</span></div>
+                <button onclick="changeLevel(-1)">-</button>
+                <button onclick="changeLevel(1)">+</button>
+            </div>
         </div>
 
         <div class="player-list" id="playerList" style="display: none;">
@@ -177,11 +182,14 @@
             <h2>GAME OVER</h2>
             <p id="finalScore"></p>
             <button class="respawn-button" onclick="respawn()">다시 시작</button>
+            <button id="resetButton" class="respawn-button" onclick="resetGame()" style="display: none;">게임 리셋</button>
         </div>
 
         <div class="instructions" id="instructions" style="display: none;">
             화살표 키 또는 WASD로 이동 • 스페이스바로 총 발사 • 몬스터를 피하세요! • 다른 플레이어와 부딪히면 기절!
         </div>
+
+        
     </div>
 
     <script>
@@ -204,11 +212,13 @@
             lastSpacePress: 0,
             roomId: null,
             isHost: false,
-            hostId: null
+            hostId: null,
+            gameLevel: 1
         };
 
         let gameChannel = null;
         let lastBroadcast = 0;
+        let electionTimeout = null;
 
         class Player {
             constructor(id, name, x, y, color) {
@@ -225,7 +235,8 @@
                 this.invulnerabilityStart = 0;
                 this.stunned = false;
                 this.stunStart = 0;
-                this.bullets = 0;
+                this.level = 1;
+                this.killScore = 0;
             }
 
             update() {
@@ -291,34 +302,46 @@
                     this.invulnerable = false;
                 }
 
-                this.score = Math.floor((Date.now() - gameState.gameStartTime) / 100);
-                // 총알 개수 표시는 레벨로 변경
-                this.bulletLevel = Math.floor(this.score / 1000);
+                const survivalScore = Math.floor((Date.now() - gameState.gameStartTime) / 100);
+                this.score = survivalScore + this.killScore;
+
+                // 레벨 계산
+                if (this.score < 1000) {
+                    this.level = 1;
+                } else if (this.score < 3000) {
+                    this.level = 2;
+                } else if (this.score < 6000) {
+                    this.level = 3;
+                } else if (this.score < 10000) {
+                    this.level = 4;
+                } else {
+                    this.level = 5;
+                }
             }
 
             shootBullet() {
-                // 총알 무제한 발사
+                const now = Date.now();
+                const rapidFireCooldown = this.level === 3 ? 100 : 200;
+
+                if (now - gameState.lastSpacePress < rapidFireCooldown) {
+                    return;
+                }
+
                 let closestTarget = null;
                 let closestDistance = Infinity;
 
+                // Find closest target (same as before)
                 gameState.players.forEach(player => {
                     if (player.id !== this.id && player.alive) {
-                        const distance = Math.sqrt(
-                            Math.pow(player.x - this.x, 2) +
-                            Math.pow(player.y - this.y, 2)
-                        );
+                        const distance = Math.sqrt(Math.pow(player.x - this.x, 2) + Math.pow(player.y - this.y, 2));
                         if (distance < closestDistance && distance < 200) {
                             closestDistance = distance;
                             closestTarget = player;
                         }
                     }
                 });
-
                 gameState.monsters.forEach(monster => {
-                    const distance = Math.sqrt(
-                        Math.pow(monster.x - this.x, 2) +
-                        Math.pow(monster.y - this.y, 2)
-                    );
+                    const distance = Math.sqrt(Math.pow(monster.x - this.x, 2) + Math.pow(monster.y - this.y, 2));
                     if (distance < closestDistance && distance < 200) {
                         closestDistance = distance;
                         closestTarget = monster;
@@ -327,30 +350,69 @@
 
                 if (closestTarget) {
                     const angle = Math.atan2(closestTarget.y - this.y, closestTarget.x - this.x);
+                    const bulletSize = 3 + (this.level * 0.5);
+                    const bulletRange = 20 + (this.level * 2);
 
-                    // 점수에 따른 총알 크기 계산 (1000점 = 1배, 10000점 = 2배)
-                    const bulletLevel = Math.floor(this.score / 1000);
-                    const bulletSize = 3 + (bulletLevel * 0.1); // 기본 3 + 레벨당 0.1씩 증가
-                    const bulletRange = 20 + (bulletLevel * 2); // 충돌 범위도 증가
-
-                    const bullet = new Bullet(this.x, this.y, angle, this.id, bulletSize, bulletRange);
-                    bullet.id = 'bullet_' + Date.now() + '_' + Math.random();
-                    gameState.bullets.push(bullet);
-
-                    if (gameChannel) {
-                        gameChannel.postMessage({
-                            type: 'bullet_fired',
-                            id: bullet.id,
-                            x: bullet.x,
-                            y: bullet.y,
-                            angle: bullet.angle,
-                            shooterId: bullet.shooterId,
-                            bulletSize: bulletSize,
-                            bulletRange: bulletRange,
-                            createTime: bullet.createTime,
-                            timestamp: Date.now()
-                        });
+                    switch (this.level) {
+                        case 1: // Single Shot
+                        case 3: // Rapid Fire (handled by cooldown)
+                            this.fireSingleBullet(angle, bulletSize, bulletRange);
+                            break;
+                        case 2: // Triple Shot
+                            this.fireSingleBullet(angle, bulletSize, bulletRange);
+                            this.fireSingleBullet(angle - 0.2, bulletSize, bulletRange);
+                            this.fireSingleBullet(angle + 0.2, bulletSize, bulletRange);
+                            break;
+                        case 4: // Homing Missile
+                            this.fireHomingMissile(closestTarget, bulletSize, bulletRange);
+                            break;
+                        case 5: // Chain Lightning
+                            this.fireChainLightning(closestTarget, bulletSize, bulletRange);
+                            break;
                     }
+                }
+                gameState.lastSpacePress = now;
+            }
+
+            fireSingleBullet(angle, bulletSize, bulletRange) {
+                const bullet = new Bullet(this.x, this.y, angle, this.id, bulletSize, bulletRange);
+                this.addAndBroadcastProjectile(bullet, 'bullet');
+            }
+
+            fireHomingMissile(target, bulletSize, bulletRange) {
+                const angle = Math.atan2(target.y - this.y, target.x - this.x);
+                const missile = new HomingMissile(this.x, this.y, angle, this.id, target, bulletSize, bulletRange);
+                this.addAndBroadcastProjectile(missile, 'homing_missile');
+            }
+
+            fireChainLightning(target, bulletSize, bulletRange) {
+                const angle = Math.atan2(target.y - this.y, target.x - this.x);
+                const lightning = new ChainLightning(this.x, this.y, angle, this.id, target, bulletSize, bulletRange);
+                this.addAndBroadcastProjectile(lightning, 'chain_lightning');
+            }
+
+            addAndBroadcastProjectile(projectile, type) {
+                projectile.id = type + '_' + Date.now() + '_' + Math.random();
+                gameState.bullets.push(projectile);
+
+                if (gameChannel) {
+                    const message = {
+                        type: 'projectile_fired',
+                        projectileType: type,
+                        id: projectile.id,
+                        x: projectile.x,
+                        y: projectile.y,
+                        angle: projectile.angle,
+                        shooterId: projectile.shooterId,
+                        bulletSize: projectile.size,
+                        bulletRange: projectile.range,
+                        createTime: projectile.createTime,
+                        timestamp: Date.now()
+                    };
+                    if (type === 'homing_missile' || type === 'chain_lightning') {
+                        message.targetId = projectile.target.id;
+                    }
+                    gameChannel.postMessage(message);
                 }
             }
 
@@ -403,11 +465,11 @@
                 ctx.textAlign = 'center';
                 ctx.fillText(this.name, screenX, screenY - 15);
 
-                // 총알 레벨 표시
-                if (this.bulletLevel > 0) {
+                // 레벨 표시
+                if (this.level > 0) {
                     ctx.fillStyle = '#00ff00';
                     ctx.font = '10px Courier New';
-                    ctx.fillText(`⚡LV${this.bulletLevel}`, screenX, screenY + 20);
+                    ctx.fillText(`LV${this.level}`, screenX, screenY + 20);
                 }
 
                 if (!this.alive) {
@@ -745,6 +807,70 @@
             }
         }
 
+        class HomingMissile extends Bullet {
+            constructor(x, y, angle, shooterId, target, bulletSize, bulletRange) {
+                super(x, y, angle, shooterId, bulletSize, bulletRange);
+                this.target = target;
+                this.speed = 4;
+                this.turnSpeed = 0.1;
+            }
+
+            update() {
+                if (this.target && this.target.alive) {
+                    const targetAngle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                    let angleDiff = targetAngle - this.angle;
+                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+                    this.angle += Math.max(-this.turnSpeed, Math.min(this.turnSpeed, angleDiff));
+                }
+
+                return super.update();
+            }
+        }
+
+        class ChainLightning extends Bullet {
+            constructor(x, y, angle, shooterId, target, bulletSize, bulletRange) {
+                super(x, y, angle, shooterId, bulletSize, bulletRange);
+                this.target = target;
+                this.jumps = 3;
+                this.jumpedTo = new Set([target.id]);
+            }
+
+            onHit(hitTarget) {
+                if (this.jumps > 0) {
+                    this.jumps--;
+                    let closestTarget = null;
+                    let closestDistance = Infinity;
+
+                    const findNextTarget = (entities) => {
+                        entities.forEach(entity => {
+                            if (entity.alive && !this.jumpedTo.has(entity.id)) {
+                                const distance = Math.sqrt(Math.pow(entity.x - this.x, 2) + Math.pow(entity.y - this.y, 2));
+                                if (distance < closestDistance && distance < 200) {
+                                    closestDistance = distance;
+                                    closestTarget = entity;
+                                }
+                            }
+                        });
+                    };
+
+                    findNextTarget(gameState.monsters);
+                    findNextTarget(gameState.players);
+
+                    if (closestTarget) {
+                        this.target = closestTarget;
+                        this.jumpedTo.add(closestTarget.id);
+                        this.x = hitTarget.x;
+                        this.y = hitTarget.y;
+                        this.createTime = Date.now(); // Reset life
+                        return true; // Still alive
+                    }
+                }
+                return false; // No more jumps, bullet dies
+            }
+        }
+
         function initRealtimeSync() {
             try {
                 gameChannel = new BroadcastChannel('game_' + gameState.roomId);
@@ -782,9 +908,9 @@
                     }
                     break;
 
-                case 'bullet_fired':
+                case 'projectile_fired':
                     if (data.shooterId !== gameState.myPlayerId) {
-                        addBullet(data);
+                        addProjectile(data);
                     }
                     break;
 
@@ -802,6 +928,49 @@
                             console.log(`${player.name}이(가) 부활했습니다.`);
                         }
                     }
+                    break;
+
+                case 'new_host_elected':
+                    clearTimeout(electionTimeout);
+                    gameState.hostId = data.hostId;
+                    gameState.isHost = (gameState.myPlayerId === data.hostId);
+                    if (gameState.isHost) {
+                        console.log('내가 새로운 호스트로 선출되었습니다.');
+                        document.getElementById('levelControl').style.display = 'block';
+                    } else {
+                        const hostPlayer = gameState.players.get(data.hostId);
+                        console.log(`새로운 호스트: ${hostPlayer ? hostPlayer.name : '알 수 없음'}`);
+                        document.getElementById('levelControl').style.display = 'none';
+                    }
+                    break;
+
+                case 'level_change':
+                    gameState.gameLevel = data.level;
+                    document.getElementById('levelDisplay').textContent = gameState.gameLevel;
+                    break;
+
+                case 'game_reset':
+                    gameState.monsters = [];
+                    gameState.bullets = [];
+                    document.getElementById('resetContainer').style.display = 'none';
+                    break;
+
+                case 'request_host_sync':
+                    if (gameState.isHost) {
+                        gameChannel.postMessage({ type: 'new_host_elected', hostId: gameState.hostId });
+                    }
+                    break;
+
+                case 'host_ping':
+                    // I am the host, and someone is pinging me. I should respond.
+                    if (gameState.isHost) {
+                        gameChannel.postMessage({ type: 'host_pong', hostId: gameState.hostId });
+                    }
+                    break;
+
+                case 'host_pong':
+                    // A host has responded to a ping. Update the host ID.
+                    gameState.hostId = data.hostId;
                     break;
             }
         }
@@ -888,15 +1057,15 @@
             });
         }
 
-        function updateGameWorld(data) {
-            if (data.hostId) {
-                gameState.hostId = data.hostId;
+        function updateWorldState(worldData) {
+            if (worldData.hostId) {
+                gameState.hostId = worldData.hostId;
             }
 
             // 호스트가 보낸 플레이어 목록으로 로컬 상태를 업데이트
-            if (data.players) {
+            if (worldData.players) {
                 const receivedPlayerIds = new Set();
-                data.players.forEach(playerData => {
+                worldData.players.forEach(playerData => {
                     receivedPlayerIds.add(playerData.id);
 
                     if (playerData.id === gameState.myPlayerId) {
@@ -943,7 +1112,7 @@
             }
 
             // 몬스터와 총알 정보는 기존과 동일하게 업데이트
-            gameState.monsters = data.monsters.map(monsterData => {
+            gameState.monsters = worldData.monsters.map(monsterData => {
                 let monster;
                 switch(monsterData.type) {
                     case 'observer':
@@ -968,29 +1137,66 @@
                 return monster;
             });
 
-            gameState.bullets = data.bullets.map(bulletData => {
+            gameState.bullets = worldData.bullets.map(bulletData => {
                 const bullet = new Bullet(bulletData.x, bulletData.y, bulletData.angle, bulletData.shooterId);
                 bullet.id = bulletData.id;
                 bullet.createTime = bulletData.createTime;
                 return bullet;
             });
 
-            if (data.gameStartTime && !gameState.gameStartTime) {
-                gameState.gameStartTime = data.gameStartTime;
+            if (worldData.gameStartTime && !gameState.gameStartTime) {
+                gameState.gameStartTime = worldData.gameStartTime;
             }
         }
 
-        function addBullet(data) {
-            const bullet = new Bullet(data.x, data.y, data.angle, data.shooterId, data.bulletSize, data.bulletRange);
-            bullet.id = data.id;
-            bullet.createTime = data.createTime;
-            gameState.bullets.push(bullet);
+        function updateGameWorld(data) {
+            updateWorldState(data);
+        }
+
+        function addProjectile(data) {
+            let projectile;
+            let target = null;
+
+            if (data.targetId) {
+                target = gameState.players.get(data.targetId) || gameState.monsters.find(m => m.id === data.targetId);
+            }
+
+            switch (data.projectileType) {
+                case 'homing_missile':
+                    projectile = new HomingMissile(data.x, data.y, data.angle, data.shooterId, target, data.bulletSize, data.bulletRange);
+                    break;
+                case 'chain_lightning':
+                    projectile = new ChainLightning(data.x, data.y, data.angle, data.shooterId, target, data.bulletSize, data.bulletRange);
+                    break;
+                default: // bullet
+                    projectile = new Bullet(data.x, data.y, data.angle, data.shooterId, data.bulletSize, data.bulletRange);
+                    break;
+            }
+
+            projectile.id = data.id;
+            projectile.createTime = data.createTime;
+            gameState.bullets.push(projectile);
+        }
+
+        function changeLevel(amount) {
+            if (!gameState.isHost) return;
+
+            const newLevel = gameState.gameLevel + amount;
+            if (newLevel >= 1 && newLevel <= 10) {
+                gameState.gameLevel = newLevel;
+                document.getElementById('levelDisplay').textContent = gameState.gameLevel;
+
+                if (gameChannel) {
+                    gameChannel.postMessage({ type: 'level_change', level: gameState.gameLevel });
+                } else {
+                    localStorage.setItem('gameEvent_level_change', JSON.stringify({ level: gameState.gameLevel, timestamp: Date.now() }));
+                }
+            }
         }
 
         function spawnMonster() {
             const now = Date.now();
-            const timeSinceStart = (now - gameState.gameStartTime) / 1000;
-            const spawnInterval = Math.max(1000 - (timeSinceStart * 30), 200);
+            const spawnInterval = 1000 / gameState.gameLevel;
 
             if (now - gameState.lastMonsterSpawn > spawnInterval) {
                 const players = Array.from(gameState.players.values());
@@ -1007,32 +1213,28 @@
                     spawnTargetPlayer = players[Math.floor(Math.random() * players.length)];
                 }
 
-                const spawnCount = Math.min(Math.floor(timeSinceStart / 10) + 1, 5);
+                const spawnDistance = 300 + Math.random() * 200;
+                const angle = Math.random() * Math.PI * 2;
+                const x = spawnTargetPlayer.x + Math.cos(angle) * spawnDistance;
+                const y = spawnTargetPlayer.y + Math.sin(angle) * spawnDistance;
 
-                for (let i = 0; i < spawnCount; i++) {
-                    const spawnDistance = 300 + Math.random() * 200;
-                    const angle = Math.random() * Math.PI * 2;
-                    const x = spawnTargetPlayer.x + Math.cos(angle) * spawnDistance;
-                    const y = spawnTargetPlayer.y + Math.sin(angle) * spawnDistance;
+                const monsterTypes = [Observer, Rusher, Patroller];
+                const weights = [0.4, 0.4, 0.2];
 
-                    const monsterTypes = [Observer, Rusher, Patroller];
-                    const weights = [0.4, 0.4, 0.2];
+                let random = Math.random();
+                let MonsterClass = Observer;
 
-                    let random = Math.random();
-                    let MonsterClass = Observer;
-
-                    for (let j = 0; j < weights.length; j++) {
-                        if (random < weights[j]) {
-                            MonsterClass = monsterTypes[j];
-                            break;
-                        }
-                        random -= weights[j];
+                for (let j = 0; j < weights.length; j++) {
+                    if (random < weights[j]) {
+                        MonsterClass = monsterTypes[j];
+                        break;
                     }
-
-                    const monster = new MonsterClass(x, y);
-                    monster.id = 'monster_' + Date.now() + '_' + Math.random();
-                    gameState.monsters.push(monster);
+                    random -= weights[j];
                 }
+
+                const monster = new MonsterClass(x, y);
+                monster.id = 'monster_' + Date.now() + '_' + Math.random();
+                gameState.monsters.push(monster);
 
                 gameState.lastMonsterSpawn = now;
             }
@@ -1050,7 +1252,7 @@
                         Math.pow(player.y - monster.y, 2)
                     );
 
-                    if (distance < player.size + monster.size - 5) {
+                    if (distance < player.size + monster.size - 2) { // 2px 정도의 여유를 줌
                         player.alive = false;
 
                         if (player.id === gameState.myPlayerId) {
@@ -1119,11 +1321,20 @@
                         Math.pow(monster.y - bullet.y, 2)
                     );
 
-                    // 총알 레벨에 따른 충돌 범위 사용
                     if (distance < monster.size + bullet.range) {
-                        monster.stunned = true;
-                        monster.stunStart = Date.now();
-                        gameState.bullets.splice(bulletIndex, 1);
+                        if (bullet instanceof ChainLightning) {
+                            if (!bullet.onHit(monster)) {
+                                gameState.bullets.splice(bulletIndex, 1);
+                            }
+                        } else {
+                            gameState.bullets.splice(bulletIndex, 1);
+                        }
+
+                        monster.alive = false;
+                        const shooter = gameState.players.get(bullet.shooterId);
+                        if (shooter) {
+                            shooter.killScore += 100; // 몬스터를 잡으면 100점 추가
+                        }
                     }
                 });
             });
@@ -1134,6 +1345,10 @@
             document.getElementById('finalScore').textContent =
                 `최종 점수: ${myPlayer.score}점 (생존 시간: ${Math.floor(myPlayer.score / 10)}초)`;
             document.getElementById('gameOver').style.display = 'flex';
+
+            if (gameState.isHost) {
+                document.getElementById('resetButton').style.display = 'block';
+            }
         }
 
         function respawn() {
@@ -1144,11 +1359,22 @@
 
             let safeX, safeY;
             let attempts = 0;
+            const maxAttempts = 50;
+            const respawnRadius = 400;
+
             do {
-                safeX = myPlayer.x + (Math.random() - 0.5) * 200;
-                safeY = myPlayer.y + (Math.random() - 0.5) * 200;
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * respawnRadius;
+                safeX = myPlayer.x + Math.cos(angle) * radius;
+                safeY = myPlayer.y + Math.sin(angle) * radius;
                 attempts++;
-            } while (attempts < 20 && isTooCloseToMonsters(safeX, safeY));
+            } while (attempts < maxAttempts && isTooCloseToMonsters(safeX, safeY));
+
+            if (attempts >= maxAttempts) {
+                console.warn("안전한 리스폰 지역을 찾지 못했습니다. 플레이어의 마지막 위치에서 리스폰합니다.");
+                safeX = myPlayer.x;
+                safeY = myPlayer.y;
+            }
 
             myPlayer.x = safeX;
             myPlayer.y = safeY;
@@ -1173,6 +1399,21 @@
                 );
                 return distance < 100;
             });
+        }
+
+        function resetGame() {
+            if (!gameState.isHost) return;
+
+            gameState.monsters = [];
+            gameState.bullets = [];
+
+            if (gameChannel) {
+                gameChannel.postMessage({ type: 'game_reset' });
+            } else {
+                localStorage.setItem('gameEvent_reset', JSON.stringify({ timestamp: Date.now() }));
+            }
+
+            document.getElementById('resetContainer').style.display = 'none';
         }
 
         function updatePlayerList() {
@@ -1225,15 +1466,15 @@
                 gameState.bullets = gameState.bullets.filter(bullet => bullet.update());
                 checkCollisions(); // 모든 충돌 계산은 호스트만 수행
 
-                // 시야에서 너무 멀리 떨어진 몬스터 정리
-                const anyPlayer = Array.from(gameState.players.values()).find(p => p.alive);
-                if (anyPlayer) {
+                // 시야에서 너무 멀리 떨어진 몬스터와 총알 정리
+                const cleanupThreshold = 2000; // 맵 시야 범위
+                const players = Array.from(gameState.players.values());
+                if (players.length > 0) {
                     gameState.monsters = gameState.monsters.filter(monster => {
-                        const distance = Math.sqrt(
-                            Math.pow(monster.x - anyPlayer.x, 2) +
-                            Math.pow(monster.y - anyPlayer.y, 2)
-                        );
-                        return distance < 1500; // 시야 범위 소폭 증가
+                        return monster.alive && players.some(p => Math.sqrt(Math.pow(monster.x - p.x, 2) + Math.pow(monster.y - p.y, 2)) < cleanupThreshold);
+                    });
+                    gameState.bullets = gameState.bullets.filter(bullet => {
+                        return players.some(p => Math.sqrt(Math.pow(bullet.x - p.x, 2) + Math.pow(bullet.y - p.y, 2)) < cleanupThreshold);
                     });
                 }
             }
@@ -1308,6 +1549,10 @@
                 statusElement.style.color = gameState.isHost ? '#ffaa00' : '#00ff00';
             }
 
+            if (gameState.isHost) {
+                document.getElementById('levelControl').style.display = 'block';
+            }
+
             document.getElementById('joinForm').style.display = 'none';
             document.getElementById('gameCanvas').style.display = 'block';
             document.getElementById('gameUI').style.display = 'block';
@@ -1329,6 +1574,10 @@
             gameState.gameStartTime = Date.now();
 
             initRealtimeSync();
+
+            if (!gameState.isHost) {
+                checkForHost();
+            }
 
             setTimeout(() => {
                 if (gameChannel) {
@@ -1391,9 +1640,9 @@
         }
 
         function initLocalStorageSync() {
-            console.log('localStorage 동기화 사용 (60fps)');
+            console.log('localStorage 동기화 사용 (저속)');
 
-            // 1. 자신의 플레이어 정보를 60fps로 저장
+            // 1. 자신의 플레이어 정보를 20fps로 저장
             setInterval(() => {
                 const myPlayer = gameState.players.get(gameState.myPlayerId);
                 if (myPlayer) {
@@ -1411,9 +1660,9 @@
                         timestamp: Date.now()
                     }));
                 }
-            }, 16);
+            }, 50);
 
-            // 2. 호스트는 게임 월드 정보를 60fps로 저장
+            // 2. 호스트는 게임 월드 정보를 10fps로 저장
             setInterval(() => {
                 if (gameState.isHost) {
                     localStorage.setItem('gameWorld_' + gameState.roomId, JSON.stringify({
@@ -1443,9 +1692,9 @@
                         timestamp: Date.now()
                     }));
                 }
-            }, 16);
+            }, 100);
 
-            // 3. 다른 플레이어 정보와 월드 정보를 60fps로 확인
+            // 3. 다른 플레이어 정보와 월드 정보를 20fps로 확인
             setInterval(() => {
                 if (gameState.isHost) {
                     // 리스폰 이벤트 확인 (localStorage 폴백용)
@@ -1470,7 +1719,7 @@
                 if (!gameState.isHost) {
                     checkGameWorldInStorage();
                 }
-            }, 16);
+            }, 50);
         }
 
         function checkOtherPlayersInStorage() {
@@ -1512,14 +1761,16 @@
                     } else {
                         if (gameState.players.has(playerData.id)) {
                             console.log('플레이어 연결 끊김:', gameState.players.get(playerData.id).name);
-                            gameState.players.delete(playerData.id);
-                            localStorage.removeItem(key);
-
+                            
                             // 호스트가 나갔는지 확인
                             if (playerData.id === gameState.hostId) {
                                 console.log('호스트 연결이 끊겼습니다. 새로운 호스트를 선출합니다.');
+                                gameState.hostId = null; // 호스트 정보 초기화
                                 electNewHost();
                             }
+
+                            gameState.players.delete(playerData.id);
+                            localStorage.removeItem(key);
                         }
                     }
                 } catch (error) {
@@ -1532,126 +1783,92 @@
         function checkGameWorldInStorage() {
             try {
                 const worldData = localStorage.getItem('gameWorld_' + gameState.roomId);
-                if (!worldData) return;
-
-                const gameWorld = JSON.parse(worldData);
-                const timeDiff = Date.now() - gameWorld.timestamp;
-
-                if (timeDiff < 3000) {
-                    // 플레이어 정보 업데이트
-                    if (gameWorld.players) {
-                        const receivedPlayerIds = new Set();
-                        gameWorld.players.forEach(playerData => {
-                            receivedPlayerIds.add(playerData.id);
-
-                            if (playerData.id === gameState.myPlayerId) {
-                                const myPlayer = gameState.players.get(gameState.myPlayerId);
-                                if (myPlayer) {
-                                    if (myPlayer.alive && !playerData.alive) {
-                                        showGameOver();
-                                    }
-                                    myPlayer.alive = playerData.alive;
-                                    myPlayer.score = playerData.score;
-                                    myPlayer.stunned = playerData.stunned;
-                                    myPlayer.invulnerable = playerData.invulnerable;
-                                    myPlayer.bulletLevel = playerData.bulletLevel;
-                                }
-                            } else {
-                                if (!gameState.players.has(playerData.id)) {
-                                    const newPlayer = new Player(playerData.id, playerData.name, playerData.x, playerData.y, playerData.color);
-                                    gameState.players.set(playerData.id, newPlayer);
-                                }
-                                const player = gameState.players.get(playerData.id);
-                                if (player) {
-                                    player.x = playerData.x;
-                                    player.y = playerData.y;
-                                    player.alive = playerData.alive;
-                                    player.score = playerData.score;
-                                    player.stunned = playerData.stunned;
-                                    player.invulnerable = playerData.invulnerable;
-                                    player.bulletLevel = playerData.bulletLevel;
-                                }
-                            }
-                        });
-
-                        gameState.players.forEach(player => {
-                            if (player.id === gameState.myPlayerId) return; // 자기 자신은 삭제하지 않음
-                            if (!receivedPlayerIds.has(player.id)) {
-                                gameState.players.delete(player.id);
-                            }
-                        });
-                    }
-
-                    // 몬스터 및 총알 정보 업데이트
-                    gameState.monsters = gameWorld.monsters.map(monsterData => {
-                        let monster;
-                        switch(monsterData.type) {
-                            case 'observer':
-                                monster = new Observer(monsterData.x, monsterData.y);
-                                break;
-                            case 'rusher':
-                                monster = new Rusher(monsterData.x, monsterData.y);
-                                break;
-                            case 'patroller':
-                                monster = new Patroller(monsterData.x, monsterData.y);
-                                break;
-                            default:
-                                monster = new Observer(monsterData.x, monsterData.y);
-                        }
-                        monster.id = monsterData.id;
-                        monster.x = monsterData.x;
-                        monster.y = monsterData.y;
-                        monster.alive = monsterData.alive;
-                        monster.stunned = monsterData.stunned;
-                        monster.stunStart = monsterData.stunStart;
-                        monster.angle = monsterData.angle;
-                        return monster;
-                    });
-
-                    gameState.bullets = gameWorld.bullets.map(bulletData => {
-                        const bullet = new Bullet(bulletData.x, bulletData.y, bulletData.angle, bulletData.shooterId);
-                        bullet.id = bulletData.id;
-                        bullet.createTime = bulletData.createTime;
-                        return bullet;
-                    });
-
-                    if (gameWorld.gameStartTime && !gameState.gameStartTime) {
-                        gameState.gameStartTime = gameWorld.gameStartTime;
-                    }
-                    if (gameWorld.hostId) {
-                        gameState.hostId = gameWorld.hostId;
+                if (worldData) {
+                    const gameWorld = JSON.parse(worldData);
+                    const timeDiff = Date.now() - gameWorld.timestamp;
+                    if (timeDiff < 3000) {
+                        updateWorldState(gameWorld);
                     }
                 }
+
+                const newHostEvent = localStorage.getItem('gameEvent_new_host');
+                if (newHostEvent) {
+                    const eventData = JSON.parse(newHostEvent);
+                    if (Date.now() - eventData.timestamp < 1000) { // Process only recent events
+                        handleGameMessage({ type: 'new_host_elected', hostId: eventData.hostId });
+                    }
+                    localStorage.removeItem('gameEvent_new_host');
+                }
+
+                const levelChangeEvent = localStorage.getItem('gameEvent_level_change');
+                if (levelChangeEvent) {
+                    const eventData = JSON.parse(levelChangeEvent);
+                    if (Date.now() - eventData.timestamp < 1000) { // Process only recent events
+                        handleGameMessage({ type: 'level_change', level: eventData.level });
+                    }
+                    localStorage.removeItem('gameEvent_level_change');
+                }
+
+                const gameResetEvent = localStorage.getItem('gameEvent_reset');
+                if (gameResetEvent) {
+                    const eventData = JSON.parse(gameResetEvent);
+                    if (Date.now() - eventData.timestamp < 1000) { // Process only recent events
+                        handleGameMessage({ type: 'game_reset' });
+                    }
+                    localStorage.removeItem('gameEvent_reset');
+                }
+
             } catch (error) {
                 console.error('게임 월드 데이터 파싱 오류:', error);
             }
         }
 
         function electNewHost() {
-            const remainingPlayers = Array.from(gameState.players.values());
+            clearTimeout(electionTimeout);
 
-            if (remainingPlayers.length === 0) {
-                gameState.isHost = true;
-                gameState.hostId = gameState.myPlayerId;
-                console.log('혼자 남았습니다. 내가 새로운 호스트입니다.');
+            // 이미 호스트가 선출되었거나, 선출 과정 진행 중이면 중단
+            if (gameState.hostId) {
                 return;
             }
 
-            // ID를 기준으로 정렬하여 가장 오래된 플레이어를 찾음
-            remainingPlayers.sort((a, b) => a.id.localeCompare(b.id));
-            const newHost = remainingPlayers[0];
+            // 랜덤한 시간(0~1초) 후 자신을 호스트로 선언
+            const electionDelay = Math.random() * 1000;
+            console.log(`호스트 선출 절차 시작. ${electionDelay.toFixed(0)}ms 후 입후보합니다.`);
 
-            gameState.hostId = newHost.id;
-
-            if (newHost.id === gameState.myPlayerId) {
-                if (!gameState.isHost) {
+            electionTimeout = setTimeout(() => {
+                // 그 사이 다른 플레이어가 호스트로 선출되지 않았다면
+                if (!gameState.hostId) {
+                    console.log('내가 새로운 호스트가 됩니다.');
                     gameState.isHost = true;
-                    console.log('내가 새로운 호스트로 선출되었습니다.');
+                    gameState.hostId = gameState.myPlayerId;
+
+                    // 새로운 호스트가 되었음을 모두에게 알림
+                    if (gameChannel) {
+                        gameChannel.postMessage({ type: 'new_host_elected', hostId: gameState.hostId });
+                    } else {
+                        // localStorage 폴백
+                        localStorage.setItem('gameEvent_new_host', JSON.stringify({ hostId: gameState.hostId, timestamp: Date.now() }));
+                    }
                 }
-            } else {
-                gameState.isHost = false;
-                console.log(`새로운 호스트: ${newHost.name}`);
-            }
+            }, electionDelay);
+        }
+
+        function checkForHost() {
+            if (gameState.isHost || !gameChannel) return;
+
+            // Check for host every 5 seconds
+            setInterval(() => {
+                if (!gameState.hostId) {
+                    console.log("호스트를 찾을 수 없습니다. 호스트 동기화를 요청합니다.");
+                    gameChannel.postMessage({ type: 'request_host_sync' });
+                    // Start election process if no host is found after a short delay
+                    setTimeout(() => {
+                        if (!gameState.hostId) {
+                            electNewHost();
+                        }
+                    }, 2000);
+                }
+            }, 5000);
         }
 
         document.addEventListener('keydown', (e) => {
