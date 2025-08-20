@@ -15,9 +15,17 @@ REM main 브랜치 푸시
 echo Pushing changes to origin/main...
 git push origin main
 
-REM gh-pages 브랜치로 전환
-echo Switching to gh-pages branch...
-git checkout gh-pages
+REM gh-pages 브랜치 존재 여부 확인
+echo Checking if gh-pages branch exists...
+git rev-parse --verify gh-pages >nul 2>&1
+IF ERRORLEVEL 1 (
+    echo gh-pages branch does not exist. Creating new gh-pages branch...
+    git checkout -b gh-pages
+    git push origin gh-pages
+) ELSE (
+    echo gh-pages branch exists. Switching...
+    git checkout gh-pages
+)
 
 REM main 브랜치 내용으로 강제 덮어쓰기
 echo Resetting gh-pages to match main...
