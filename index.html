@@ -190,6 +190,7 @@
         lastSync: 0,
         syncInterval: 100,
         peers: new Map(),
+        isSyncing: false,
       };
 
       // 플레이어 클래스
@@ -780,63 +781,38 @@
 
       // localStorage 동기화 시스템
       function initLocalStorageSync() {
-        if (gameState.isHost) {
-          const roomData = {
-            players: {},
-            monsters: [],
-            bullets: [],
-            gameStartTime: gameState.gameStartTime,
-            lastUpdate: Date.now(),
-          };
-          localStorage.setItem('gameRoom_' + gameState.roomId, JSON.stringify(roomData));
-        }
+        // 더 안정적인 동기화 간격
+        setInterval(syncWithLocalStorage, 200);
 
-        // 더 자주 동기화 (50ms)
-        setInterval(syncWithLocalStorage, 50);
-        window.addEventListener('storage', handleStorageChange);
+        // storage 이벤트는 제거 (무한루프 방지)
+        // window.addEventListener('storage', handleStorageChange);
       }
 
       // localStorage와 동기화
       function syncWithLocalStorage() {
-        if (!gameState.roomId) return;
+        if (!gameState.roomId || syncState.isSyncing) return;
 
-        const roomKey = 'gameRoom_' + gameState.roomId;
-        const roomDataStr = localStorage.getItem(roomKey);
+        syncState.isSyncing = true;
 
-        if (!roomDataStr) {
-          if (gameState.isHost) {
-            const roomData = {
+        try {
+          const roomKey = 'gameRoom_' + gameState.roomId;
+          const roomDataStr = localStorage.getItem(roomKey);
+          let roomData;
+
+          if (!roomDataStr) {
+            // 방 데이터가 없으면 새로 생성
+            roomData = {
               players: {},
-              monsters: gameState.monsters.map((m) => ({
-                id: m.id,
-                type: m.type,
-                x: m.x,
-                y: m.y,
-                alive: m.alive,
-                stunned: m.stunned,
-                stunStart: m.stunStart,
-                angle: m.angle,
-              })),
-              bullets: gameState.bullets.map((b) => ({
-                id: b.id,
-                x: b.x,
-                y: b.y,
-                angle: b.angle,
-                shooterId: b.shooterId,
-                createTime: b.createTime,
-              })),
+              monsters: [],
+              bullets: [],
               gameStartTime: gameState.gameStartTime,
               lastUpdate: Date.now(),
             };
-            localStorage.setItem(roomKey, JSON.stringify(roomData));
+          } else {
+            roomData = JSON.parse(roomDataStr);
           }
-          return;
-        }
 
-        try {
-          const roomData = JSON.parse(roomDataStr);
-
-          // 모든 플레이어가 자신의 정보를 업데이트
+          // 내 플레이어 정보 업데이트
           const myPlayer = gameState.players.get(gameState.myPlayerId);
           if (myPlayer) {
             roomData.players[gameState.myPlayerId] = {
@@ -854,10 +830,11 @@
             };
           }
 
-          // 다른 플레이어들 동기화
+          // 다른 플레이어들 정보 가져오기 (덮어쓰지 않고 업데이트만)
           Object.values(roomData.players).forEach((playerData) => {
             if (playerData.id !== gameState.myPlayerId) {
               if (!gameState.players.has(playerData.id)) {
+                // 새 플레이어 추가
                 const newPlayer = new Player(
                   playerData.id,
                   playerData.name,
@@ -865,11 +842,19 @@
                   playerData.y,
                   playerData.color
                 );
+                newPlayer.alive = playerData.alive;
+                newPlayer.score = playerData.score;
+                newPlayer.bullets = playerData.bullets;
+                newPlayer.invulnerable = playerData.invulnerable;
+                newPlayer.stunned = playerData.stunned;
                 gameState.players.set(playerData.id, newPlayer);
               } else {
+                // 기존 플레이어 업데이트 (최근 업데이트만)
                 const existingPlayer = gameState.players.get(playerData.id);
-                // 최근 업데이트만 적용 (충돌 방지)
-                if (!playerData.lastUpdate || Date.now() - playerData.lastUpdate < 5000) {
+                const timeDiff = Date.now() - (playerData.lastUpdate || 0);
+
+                if (timeDiff < 3000) {
+                  // 3초 이내 데이터만 신뢰
                   existingPlayer.x = playerData.x;
                   existingPlayer.y = playerData.y;
                   existingPlayer.alive = playerData.alive;
@@ -882,9 +867,8 @@
             }
           });
 
-          // 몬스터와 총알은 호스트가 관리하되, 모든 클라이언트가 동기화
+          // 호스트만 몬스터와 총알 관리
           if (gameState.isHost) {
-            // 호스트는 몬스터 상태를 업데이트
             roomData.monsters = gameState.monsters.map((m) => ({
               id: m.id,
               type: m.type,
@@ -904,28 +888,29 @@
               shooterId: b.shooterId,
               createTime: b.createTime,
             }));
-          } else {
-            // 클라이언트는 호스트의 몬스터 정보를 받아옴
-            gameState.monsters = roomData.monsters.map((monsterData) => {
-              // 기존 몬스터가 있으면 업데이트, 없으면 새로 생성
-              let monster = gameState.monsters.find((m) => m.id === monsterData.id);
 
-              if (!monster) {
-                switch (monsterData.type) {
-                  case 'observer':
-                    monster = new Observer(monsterData.x, monsterData.y);
-                    break;
-                  case 'rusher':
-                    monster = new Rusher(monsterData.x, monsterData.y);
-                    break;
-                  case 'patroller':
-                    monster = new Patroller(monsterData.x, monsterData.y);
-                    break;
-                  default:
-                    monster = new Observer(monsterData.x, monsterData.y);
-                }
+            roomData.gameStartTime = gameState.gameStartTime;
+          }
+
+          // 클라이언트는 호스트의 몬스터/총알 정보만 받기
+          if (!gameState.isHost && roomData.monsters && roomData.bullets) {
+            // 몬스터 동기화
+            const newMonsters = [];
+            roomData.monsters.forEach((monsterData) => {
+              let monster;
+              switch (monsterData.type) {
+                case 'observer':
+                  monster = new Observer(monsterData.x, monsterData.y);
+                  break;
+                case 'rusher':
+                  monster = new Rusher(monsterData.x, monsterData.y);
+                  break;
+                case 'patroller':
+                  monster = new Patroller(monsterData.x, monsterData.y);
+                  break;
+                default:
+                  monster = new Observer(monsterData.x, monsterData.y);
               }
-
               monster.id = monsterData.id;
               monster.x = monsterData.x;
               monster.y = monsterData.y;
@@ -933,45 +918,35 @@
               monster.stunned = monsterData.stunned;
               monster.stunStart = monsterData.stunStart;
               monster.angle = monsterData.angle;
-              return monster;
+              newMonsters.push(monster);
             });
+            gameState.monsters = newMonsters;
 
-            gameState.bullets = roomData.bullets.map((bulletData) => {
-              let bullet = gameState.bullets.find((b) => b.id === bulletData.id);
-
-              if (!bullet) {
-                bullet = new Bullet(bulletData.x, bulletData.y, bulletData.angle, bulletData.shooterId);
-                bullet.createTime = bulletData.createTime;
-              }
-
+            // 총알 동기화
+            const newBullets = [];
+            roomData.bullets.forEach((bulletData) => {
+              const bullet = new Bullet(bulletData.x, bulletData.y, bulletData.angle, bulletData.shooterId);
               bullet.id = bulletData.id;
-              bullet.x = bulletData.x;
-              bullet.y = bulletData.y;
-              bullet.angle = bulletData.angle;
-              bullet.shooterId = bulletData.shooterId;
               bullet.createTime = bulletData.createTime;
-              return bullet;
+              newBullets.push(bullet);
             });
+            gameState.bullets = newBullets;
+
+            // 게임 시작 시간 동기화
+            if (roomData.gameStartTime) {
+              gameState.gameStartTime = roomData.gameStartTime;
+            }
           }
 
-          // 게임 시작 시간 동기화
-          if (roomData.gameStartTime && !gameState.gameStartTime) {
-            gameState.gameStartTime = roomData.gameStartTime;
-          }
-
-          roomData.lastUpdate = Date.now();
           localStorage.setItem(roomKey, JSON.stringify(roomData));
         } catch (error) {
           console.error('동기화 오류:', error);
+        } finally {
+          syncState.isSyncing = false;
         }
       }
 
-      // 스토리지 변경 감지
-      function handleStorageChange(e) {
-        if (e.key && e.key.startsWith('gameRoom_' + gameState.roomId)) {
-          syncWithLocalStorage();
-        }
-      }
+      // 스토리지 변경 감지 (제거됨 - 무한루프 방지)
 
       // 몬스터 스폰
       function spawnMonster() {
@@ -1184,9 +1159,11 @@
           return;
         }
 
+        // 화면 클리어
         ctx.fillStyle = '#000428';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        // 배경 별들
         for (let i = 0; i < 100; i++) {
           const starX = (Math.sin(i * 12.9898) * 43758.5453) % gameState.mapSize.width;
           const starY = (Math.cos(i * 78.233) * 43758.5453) % gameState.mapSize.height;
@@ -1199,15 +1176,16 @@
           }
         }
 
+        // 카메라 업데이트
         updateCamera();
 
-        // 호스트만 몬스터 스폰 및 AI 처리
+        // 호스트만 몬스터 스폰 및 AI 관리
         if (gameState.isHost) {
           spawnMonster();
           gameState.monsters.forEach((monster) => monster.update());
           gameState.bullets = gameState.bullets.filter((bullet) => bullet.update());
 
-          // 호스트만 몬스터 정리
+          // 몬스터 정리
           const anyPlayer = Array.from(gameState.players.values()).find((p) => p.alive);
           if (anyPlayer) {
             gameState.monsters = gameState.monsters.filter((monster) => {
@@ -1215,23 +1193,15 @@
               return distance < 1000;
             });
           }
-        } else {
-          // 클라이언트도 총알 업데이트 (부드러운 애니메이션)
-          gameState.bullets.forEach((bullet) => {
-            bullet.x += Math.cos(bullet.angle) * bullet.speed;
-            bullet.y += Math.sin(bullet.angle) * bullet.speed;
-          });
-
-          // 클라이언트도 몬스터 애니메이션 업데이트
-          gameState.monsters.forEach((monster) => {
-            monster.angle += 0.1;
-          });
         }
 
-        // 모든 플레이어가 자신의 플레이어 업데이트
-        gameState.players.forEach((player) => player.update());
+        // 모든 플레이어 업데이트 (각자 자신만)
+        const myPlayer = gameState.players.get(gameState.myPlayerId);
+        if (myPlayer) {
+          myPlayer.update();
+        }
 
-        // 모든 플레이어가 충돌 체크
+        // 충돌 체크
         checkCollisions();
 
         // 그리기
