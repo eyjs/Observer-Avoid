@@ -1,0 +1,138 @@
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: linear-gradient(135deg, #0c1445, #1a237e);
+        font-family: 'Courier New', monospace;
+        color: #00ff00;
+        overflow: hidden;
+        height: 100vh;
+      }
+
+      .game-container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      #gameCanvas {
+        background: radial-gradient(circle at center, #000428, #004e92);
+        border: 2px solid #00ff41;
+        display: block;
+        margin: 0 auto;
+      }
+
+      .ui {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid #00ff41;
+      }
+
+      .player-list {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid #00ff41;
+        min-width: 200px;
+      }
+
+      .join-form {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.9);
+        padding: 30px;
+        border-radius: 10px;
+        border: 2px solid #00ff41;
+        text-align: center;
+        z-index: 20;
+      }
+
+      input[type='text'] {
+        background: rgba(0, 0, 0, 0.7);
+        border: 1px solid #00ff41;
+        color: #00ff00;
+        padding: 10px;
+        margin: 10px;
+        border-radius: 5px;
+        font-family: inherit;
+      }
+
+      button {
+        background: linear-gradient(45deg, #004e92, #000428);
+        border: 2px solid #00ff41;
+        color: #00ff00;
+        padding: 10px 20px;
+        cursor: pointer;
+        border-radius: 5px;
+        font-family: inherit;
+        margin: 5px;
+        transition: all 0.3s;
+      }
+
+      button:hover {
+        background: linear-gradient(45deg, #006bb3, #001845);
+        box-shadow: 0 0 10px #00ff41;
+      }
+
+      .game-over {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(30, 30, 30, 0.7); /* 회색 반투명 배경 */
+        display: none; /* 기본적으로 숨김 */
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 15;
+        text-align: center;
+        color: #ff4444;
+      }
+
+      .game-over h2 {
+        font-size: 48px;
+        text-shadow: 0 0 10px #ff0000;
+      }
+
+      .game-over p {
+        font-size: 24px;
+        margin-bottom: 100px; /* 버튼과의 간격 */
+      }
+
+      .respawn-button {
+        position: absolute;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 15px 30px;
+        font-size: 18px;
+        background: linear-gradient(45deg, #ff4444, #b30000);
+        border: 2px solid #ff8888;
+        color: #ffffff;
+      }
+
+      .instructions {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid #00ff41;
+        font-size: 12px;
+      }
